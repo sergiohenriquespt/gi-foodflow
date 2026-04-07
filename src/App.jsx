@@ -164,7 +164,7 @@ function BigKeypad({ value, onChange, onConfirm, maxLen=10, confirmLabel='→', 
 }
 
 // Ecrã de entrada numérica (usado nas duas etapas de identificação)
-function InputScreen({ title, subtitle, value, onChange, onConfirm, onBack, confirmLabel, hint, error, children }) {
+function InputScreen({ title, subtitle, value, onChange, onConfirm, onBack, confirmLabel, hint, error, children, serialStatus, onConnectSerial }) {
   return (
     <div style={{ minHeight:'100vh', background:C.bg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
       {onBack && (
@@ -179,7 +179,6 @@ function InputScreen({ title, subtitle, value, onChange, onConfirm, onBack, conf
 
         <div style={{ marginBottom:12 }}>
           <div style={{ fontSize:13, color:C.textMuted, marginBottom:8 }}>{title}</div>
-          {/* Display do valor */}
           <div style={{ background:C.surface3, border:`1.5px solid ${error ? C.danger+'66' : C.border2}`, borderRadius:12, padding:'14px 18px', textAlign:'center', minHeight:60, display:'flex', alignItems:'center', justifyContent:'center' }}>
             {value
               ? <span style={{ fontSize:32, letterSpacing:10, color:C.yellow, fontWeight:600 }}>{'•'.repeat(value.length)}</span>
@@ -190,7 +189,29 @@ function InputScreen({ title, subtitle, value, onChange, onConfirm, onBack, conf
 
         <BigKeypad value={value} onChange={onChange} onConfirm={onConfirm} confirmLabel={confirmLabel} confirmDisabled={!value} />
 
-        {hint && (
+        {/* Indicador do leitor RFID */}
+        {serialStatus !== undefined && (
+          <div style={{ marginTop:16 }}>
+            {!navigator.serial ? (
+              <div style={{ textAlign:'center', fontSize:11, color:C.warn }}>Leitor RFID: requer Chrome ou Edge</div>
+            ) : serialStatus === 'connected' ? (
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:6, fontSize:12, color:C.success }}>
+                <span style={{ width:7, height:7, borderRadius:'50%', background:C.success, display:'inline-block' }}/>
+                Leitor RFID ativo — passe o cartão para entrar
+              </div>
+            ) : serialStatus === 'connecting' ? (
+              <div style={{ textAlign:'center', fontSize:12, color:C.warn }}>A ligar ao leitor…</div>
+            ) : (
+              <button onClick={onConnectSerial}
+                style={{ width:'100%', height:46, background:C.yellow+'18', border:`1.5px solid ${C.yellow}55`, borderRadius:10, fontSize:13, fontWeight:600, color:C.yellow, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                <Icon name="card" size={16} color={C.yellow}/>
+                {serialStatus === 'error' ? '⚠ Religar leitor RFID' : 'Conectar leitor RFID'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {hint && serialStatus === undefined && (
           <div style={{ textAlign:'center', fontSize:11, color:C.textMuted, marginTop:14, display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
             <Icon name="card" size={12} color={C.textMuted} />
             {hint}
@@ -243,10 +264,14 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
   const [err,      setErr]      = useState('')
   const [selDay,   setSelDay]   = useState(TODAY)
 
-  const rfidRef   = useRef('')
-  const rfidTimer = useRef(null)
+  const [serialStatus,  setSerialStatus]  = useState('idle') // 'idle'|'connecting'|'connected'|'error'
+  const rfidRef      = useRef('')
+  const rfidTimer    = useRef(null)
+  const serialPort   = useRef(null)
+  const serialReader = useRef(null)
+  const isMounted    = useRef(true)
 
-  // Captura RFID (teclado HID rápido + Enter)
+  // Captura RFID via teclado HID (fallback)
   useEffect(() => {
     if (step === 'dashboard') return
     const handler = (e) => {
@@ -262,6 +287,66 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
     window.addEventListener('keydown', handler)
     return () => { window.removeEventListener('keydown', handler); clearTimeout(rfidTimer.current) }
   }, [step, funcionarios])
+
+  // Web Serial API — auto-connect na montagem
+  useEffect(() => {
+    isMounted.current = true
+    if (!navigator.serial) return
+    const autoConnect = async () => {
+      try {
+        const ports = await navigator.serial.getPorts()
+        if (ports.length > 0 && isMounted.current) await openSerialPortM(ports[0])
+      } catch (_) {}
+    }
+    autoConnect()
+    return () => {
+      isMounted.current = false
+      closeSerialPortM()
+    }
+  }, [])
+
+  const openSerialPortM = async (port) => {
+    try {
+      setSerialStatus('connecting')
+      serialPort.current = port
+      await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' })
+      if (!isMounted.current) { await port.close(); return }
+      setSerialStatus('connected')
+      startSerialReadingM(port)
+    } catch (e) { if (isMounted.current) setSerialStatus('error') }
+  }
+
+  const startSerialReadingM = async (port) => {
+    let buffer = ''
+    try {
+      const reader = port.readable.getReader()
+      serialReader.current = reader
+      while (isMounted.current) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += new TextDecoder().decode(value)
+        const lines = buffer.split(/[\r\n]+/)
+        buffer = lines.pop()
+        for (const line of lines) {
+          const uid = line.trim()
+          if (uid && isMounted.current) handleRfid(uid)
+        }
+      }
+      reader.releaseLock()
+    } catch (_) { if (isMounted.current) setSerialStatus('error') }
+  }
+
+  const closeSerialPortM = async () => {
+    try {
+      if (serialReader.current) { await serialReader.current.cancel(); serialReader.current = null }
+      if (serialPort.current?.readable) { await serialPort.current.close(); serialPort.current = null }
+    } catch (_) {}
+  }
+
+  const connectSerialM = async () => {
+    if (!navigator.serial) return
+    try { const port = await navigator.serial.requestPort(); await openSerialPortM(port) } catch (_) {}
+  }
 
   const handleRfid = (val) => {
     const f = funcionarios.find(f => f.rfid === val.trim())
@@ -297,8 +382,9 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
       onConfirm={submitNumero}
       onBack={onBack}
       confirmLabel="→"
-      hint="Ou passe o cartão RFID no leitor"
-      error={err}>
+      error={err}
+      serialStatus={serialStatus}
+      onConnectSerial={connectSerialM}>
       {/* caixinha de demo */}
       <div style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:'10px 14px', marginBottom:18 }}>
         <div style={{ fontSize:10, fontWeight:700, color:C.textMuted, textTransform:'uppercase', letterSpacing:1, marginBottom:6 }}>Códigos de teste</div>
@@ -324,7 +410,9 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
       onConfirm={submitPin}
       onBack={()=>{ setStep('numero'); setFunc(null); setPinInput(''); setErr('') }}
       confirmLabel="→"
-      error={err}>
+      error={err}
+      serialStatus={serialStatus}
+      onConnectSerial={connectSerialM}>
       {/* mostra quem está a entrar */}
       <div style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 16px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:12, marginBottom:18 }}>
         <Avatar nome={func.nome} foto={func.foto} size={48} />
@@ -811,7 +899,7 @@ function Backoffice({ funcionarios, setFuncionarios, ementas, setEmentas, marcac
         <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:'0 22px', height:52, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ display:'flex', alignItems:'center', gap:10 }}>
             <Icon name={nav.find(n=>n.key===sec)?.iconName} size={16} color={C.yellow} />
-            <span style={{ fontSize:15, fontWeight:600, color:C.text }}>{nav.find(n=>n.key===sec)?.label}</span>
+            <span style={{ fontSize:17, fontWeight:600, color:C.text }}>{nav.find(n=>n.key===sec)?.label}</span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:6 }}>
             <span style={{ fontSize:10, color:C.yellow+'aa', fontWeight:700, letterSpacing:1 }}>GI</span>
@@ -875,7 +963,7 @@ function SecEmentas({ ementas, setEmentas }) {
               {em && <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7 }}>
                 {[1,2,3,4].map(n => {
                   const l=em[`prato${n}_label`], d=em[`prato${n}_desc`]
-                  if (!l) return <div key={n} style={{ background:C.surface2, borderRadius:6, padding:'7px 10px', border:`1px dashed ${C.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}><span style={{ fontSize:10, color:C.textMuted }}>Slot {n} vazio</span></div>
+                  if (!l) return <div key={n} style={{ background:C.surface2, borderRadius:6, padding:'7px 10px', border:`1px dashed ${C.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}><span style={{ fontSize:12, color:C.textMuted }}>Slot {n} vazio</span></div>
                   const ps=pratoStyle(l)
                   return <div key={n} style={{ background:ps.bg, border:`1px solid ${ps.border}`, borderRadius:6, padding:'7px 10px' }}><div style={{ fontSize:10, fontWeight:700, color:ps.color }}>{l}</div><div style={{ fontSize:11, color:C.textSub, marginTop:1 }}>{d||<span style={{ color:C.textMuted, fontStyle:'italic' }}>sem descrição</span>}</div></div>
                 })}
@@ -894,10 +982,10 @@ function EmentaEditor({ ementa, onSave, onCancel }) {
   const iS = { padding:'7px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, background:C.surface3, color:C.text }
   return (
     <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:22, maxWidth:560 }}>
-      <div style={{ fontSize:14, fontWeight:600, color:C.text, marginBottom:18 }}>{f.tipo==='A'?'🌞 Almoço':'🌙 Jantar'} · {fmtF(f.data)}</div>
+      <div style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:18 }}>{f.tipo==='A'?'🌞 Almoço':'🌙 Jantar'} · {fmtF(f.data)}</div>
       {[1,2,3,4].map(n => (
         <div key={n} style={{ marginBottom:12, padding:12, background:C.surface2, borderRadius:8, border:`1px solid ${C.border}` }}>
-          <div style={{ fontSize:9, fontWeight:700, color:C.textMuted, marginBottom:7, textTransform:'uppercase', letterSpacing:.5 }}>Prato {n} — tipo em branco oculta o slot</div>
+          <div style={{ fontSize:11, fontWeight:700, color:C.textMuted, marginBottom:7, textTransform:'uppercase', letterSpacing:.5 }}>Prato {n} — tipo em branco oculta o slot</div>
           <div style={{ display:'flex', gap:8 }}>
             <input value={f[`prato${n}_label`]} onChange={e=>set(`prato${n}_label`,e.target.value)} placeholder="Tipo (ex: Carne)" style={{...iS, width:130, flexShrink:0}} />
             <input value={f[`prato${n}_desc`]}  onChange={e=>set(`prato${n}_desc`, e.target.value)} placeholder="Descrição do prato"  style={{...iS, flex:1}} />
@@ -919,24 +1007,24 @@ function SecFuncionarios({ funcionarios, setFuncionarios }) {
   const save  = (form) => { form.id ? setFuncionarios(p=>p.map(f=>f.id===form.id?form:f)) : setFuncionarios(p=>[...p,{...form,id:uid()}]); setEditing(null) }
   const del   = (id) => { if(window.confirm('Eliminar funcionário?')) setFuncionarios(p=>p.filter(f=>f.id!==id)) }
   if (editing !== null) return <FuncionarioEditor form={editing} onSave={save} onCancel={()=>setEditing(null)} />
-  const thS = { padding:'8px 12px', textAlign:'left', fontSize:9, fontWeight:700, color:C.textMuted, textTransform:'uppercase' }
-  const tdS = { padding:'9px 12px', borderTop:`1px solid ${C.border}` }
+  const thS = { padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:700, color:C.textMuted, textTransform:'uppercase' }
+  const tdS = { padding:'11px 14px', borderTop:`1px solid ${C.border}` }
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-        <div style={{ fontSize:12, color:C.textSub }}>{funcionarios.length} funcionário(s)</div>
-        <button onClick={()=>setEditing(blank)} style={{ padding:'6px 14px', background:C.yellow+'22', border:`1px solid ${C.yellow}55`, borderRadius:8, color:C.yellow, fontSize:12, fontWeight:600 }}>+ Novo</button>
+        <div style={{ fontSize:14, color:C.textSub }}>{funcionarios.length} funcionário(s)</div>
+        <button onClick={()=>setEditing(blank)} style={{ padding:'8px 18px', background:C.yellow+'22', border:`1px solid ${C.yellow}55`, borderRadius:8, color:C.yellow, fontSize:14, fontWeight:600 }}>+ Novo</button>
       </div>
       <div style={{ background:C.surface, borderRadius:10, border:`1px solid ${C.border}`, overflow:'hidden' }}>
         <table style={{ width:'100%', borderCollapse:'collapse' }}>
           <thead><tr style={{ background:C.surface2 }}>{['Nº','Funcionário','PIN','RFID','Estado',''].map(h=><th key={h} style={thS}>{h}</th>)}</tr></thead>
           <tbody>{funcionarios.map(f => (
             <tr key={f.id}>
-              <td style={{...tdS, fontSize:11, color:C.textSub}}>{f.numero}</td>
-              <td style={tdS}><div style={{ display:'flex', alignItems:'center', gap:8 }}><Avatar nome={f.nome} foto={f.foto} size={26}/><span style={{ fontSize:13, fontWeight:500, color:C.text }}>{f.nome}</span></div></td>
-              <td style={{...tdS, fontFamily:'monospace', fontSize:12, color:C.textMuted}}>{f.pin ? '•'.repeat(f.pin.length) : <span style={{ color:C.textMuted, fontStyle:'italic', fontSize:11 }}>sem PIN</span>}</td>
-              <td style={{...tdS, fontFamily:'monospace', fontSize:11, color:C.textSub}}>{f.rfid}</td>
-              <td style={tdS}><span style={{ fontSize:9, padding:'2px 7px', borderRadius:4, background:f.ativo?C.successBg:C.surface2, color:f.ativo?C.success:C.textMuted, border:`1px solid ${f.ativo?C.success+'33':C.border}`, fontWeight:700 }}>{f.ativo?'Ativo':'Inativo'}</span></td>
+              <td style={{...tdS, fontSize:13, color:C.textSub}}>{f.numero}</td>
+              <td style={tdS}><div style={{ display:'flex', alignItems:'center', gap:8 }}><Avatar nome={f.nome} foto={f.foto} size={26}/><span style={{ fontSize:15, fontWeight:500, color:C.text }}>{f.nome}</span></div></td>
+              <td style={{...tdS, fontFamily:'monospace', fontSize:13, color:C.textMuted}}>{f.pin ? '•'.repeat(f.pin.length) : <span style={{ color:C.textMuted, fontStyle:'italic', fontSize:11 }}>sem PIN</span>}</td>
+              <td style={{...tdS, fontFamily:'monospace', fontSize:13, color:C.textSub}}>{f.rfid}</td>
+              <td style={tdS}><span style={{ fontSize:11, padding:'3px 9px', borderRadius:4, background:f.ativo?C.successBg:C.surface2, color:f.ativo?C.success:C.textMuted, border:`1px solid ${f.ativo?C.success+'33':C.border}`, fontWeight:700 }}>{f.ativo?'Ativo':'Inativo'}</span></td>
               <td style={tdS}><div style={{ display:'flex', gap:5 }}>
                 <button onClick={()=>setEditing({...f})} style={{ fontSize:11, padding:'3px 9px', background:C.yellow+'22', border:`1px solid ${C.yellow}44`, borderRadius:6, fontWeight:600, color:C.yellow }}>Editar</button>
                 <button onClick={()=>del(f.id)} style={{ fontSize:11, padding:'3px 9px', background:C.dangerBg, border:`1px solid ${C.danger}33`, borderRadius:6, color:C.danger }}>✕</button>
@@ -950,44 +1038,118 @@ function SecFuncionarios({ funcionarios, setFuncionarios }) {
 }
 
 function FuncionarioEditor({ form:init, onSave, onCancel }) {
-  const [f, setF] = useState({...init})
+  const [f, setF]           = useState({...init})
+  const [rfidState, setRfidState] = useState('idle') // 'idle'|'waiting'|'done'|'error'
   const set = (k,v) => setF(p=>({...p,[k]:v}))
   const handleFoto = (e) => { const file=e.target.files?.[0]; if(!file)return; const r=new FileReader(); r.onload=ev=>set('foto',ev.target.result); r.readAsDataURL(file) }
-  const iS = { width:'100%', padding:'7px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:13, background:C.surface3, color:C.text, boxSizing:'border-box' }
+
+  // Lê um único UID do cartão e preenche o campo RFID
+  const readRfidCard = async () => {
+    if (!navigator.serial) { alert('Web Serial não disponível. Usa Chrome ou Edge.'); return }
+    setRfidState('waiting')
+    let port = null
+    try {
+      // Tenta porta já autorizada, ou pede seleção
+      const ports = await navigator.serial.getPorts()
+      port = ports.length > 0 ? ports[0] : await navigator.serial.requestPort()
+      await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' })
+      const reader = port.readable.getReader()
+      let buffer = ''
+      // Lê até encontrar uma linha completa (timeout 10s)
+      const timeout = setTimeout(async () => {
+        try { await reader.cancel() } catch (_) {}
+      }, 10000)
+      try {
+        while (true) {
+          const { value, done } = await reader.read()
+          if (done) break
+          buffer += new TextDecoder().decode(value)
+          const lines = buffer.split(/[\r\n]+/)
+          const uid = lines.find(l => l.trim())
+          if (uid) {
+            clearTimeout(timeout)
+            set('rfid', uid.trim())
+            setRfidState('done')
+            setTimeout(() => setRfidState('idle'), 2000)
+            break
+          }
+          buffer = lines[lines.length - 1]
+        }
+      } finally {
+        reader.releaseLock()
+      }
+    } catch (e) {
+      setRfidState('error')
+      setTimeout(() => setRfidState('idle'), 3000)
+    } finally {
+      try { if (port?.readable) await port.close() } catch (_) {}
+    }
+  }
+
+  const iS = { flex:1, padding:'8px 12px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:14, background:C.surface3, color:C.text, boxSizing:'border-box' }
+  const lS = { fontSize:11, fontWeight:700, color:C.textMuted, display:'block', marginBottom:4, textTransform:'uppercase', letterSpacing:.4 }
+
   return (
-    <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:22, maxWidth:440 }}>
-      <div style={{ fontSize:14, fontWeight:600, color:C.text, marginBottom:18 }}>{f.id?'Editar Funcionário':'Novo Funcionário'}</div>
-      <div style={{ display:'flex', gap:18, marginBottom:14, alignItems:'center' }}>
+    <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:24, maxWidth:500 }}>
+      <div style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:20 }}>{f.id?'Editar Funcionário':'Novo Funcionário'}</div>
+
+      <div style={{ display:'flex', gap:20, marginBottom:18, alignItems:'center' }}>
         <div style={{ textAlign:'center' }}>
-          <Avatar nome={f.nome||'?'} foto={f.foto} size={54}/>
-          <label style={{ display:'block', marginTop:5, fontSize:11, color:C.yellow, fontWeight:600, cursor:'pointer' }}>Foto<input type="file" accept="image/*" onChange={handleFoto} style={{ display:'none' }}/></label>
+          <Avatar nome={f.nome||'?'} foto={f.foto} size={64}/>
+          <label style={{ display:'block', marginTop:7, fontSize:12, color:C.yellow, fontWeight:600, cursor:'pointer' }}>
+            Foto <input type="file" accept="image/*" onChange={handleFoto} style={{ display:'none' }}/>
+          </label>
         </div>
         <div style={{ flex:1 }}>
           {[{k:'numero',l:'Nº funcionário'},{k:'nome',l:'Nome completo'}].map(({k,l})=>(
-            <div key={k} style={{ marginBottom:9 }}>
-              <label style={{ fontSize:9, fontWeight:700, color:C.textMuted, display:'block', marginBottom:3, textTransform:'uppercase' }}>{l}</label>
-              <input value={f[k]} onChange={e=>set(k,e.target.value)} style={iS}/>
+            <div key={k} style={{ marginBottom:12 }}>
+              <label style={lS}>{l}</label>
+              <input value={f[k]} onChange={e=>set(k,e.target.value)} style={{...iS, flex:'none', width:'100%'}}/>
             </div>
           ))}
         </div>
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:6 }}>
-        {[{k:'pin',l:'PIN (deixa vazio = sem PIN)',t:'password'},{k:'rfid',l:'RFID UID',t:'text'}].map(({k,l,t})=>(
-          <div key={k}>
-            <label style={{ fontSize:9, fontWeight:700, color:C.textMuted, display:'block', marginBottom:3, textTransform:'uppercase' }}>{l}</label>
-            <input type={t} value={f[k]} onChange={e=>set(k,e.target.value)} style={iS}/>
-          </div>
-        ))}
+
+      {/* PIN */}
+      <div style={{ marginBottom:14 }}>
+        <label style={lS}>PIN (deixa vazio = sem PIN)</label>
+        <input type="password" value={f.pin} onChange={e=>set('pin',e.target.value)} style={{...iS, flex:'none', width:'100%'}}/>
       </div>
-      <div style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:'8px 12px', marginBottom:14, fontSize:11, color:C.textMuted }}>
+
+      {/* RFID — campo + botão de leitura */}
+      <div style={{ marginBottom:6 }}>
+        <label style={lS}>RFID UID</label>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <input type="text" value={f.rfid} onChange={e=>set('rfid',e.target.value)}
+            placeholder="ex: 0006A3F2  (ou usa o botão →)"
+            style={iS}/>
+          <button onClick={readRfidCard} disabled={rfidState==='waiting'}
+            style={{
+              flexShrink:0, height:40, padding:'0 14px', borderRadius:8, fontSize:13, fontWeight:600, cursor:'pointer',
+              background: rfidState==='done' ? C.successBg : rfidState==='error' ? C.dangerBg : rfidState==='waiting' ? C.surface2 : C.yellow+'22',
+              border: `1.5px solid ${rfidState==='done' ? C.success+'55' : rfidState==='error' ? C.danger+'55' : rfidState==='waiting' ? C.border : C.yellow+'55'}`,
+              color: rfidState==='done' ? C.success : rfidState==='error' ? C.danger : rfidState==='waiting' ? C.textMuted : C.yellow,
+              whiteSpace:'nowrap',
+            }}>
+            {rfidState==='waiting' ? '⏳ Passe o cartão…' : rfidState==='done' ? '✓ Lido!' : rfidState==='error' ? '⚠ Erro' : '📡 Ler cartão'}
+          </button>
+        </div>
+        {rfidState==='waiting' && (
+          <div style={{ marginTop:6, fontSize:12, color:C.warn }}>Aproxime o cartão do leitor RD200 nos próximos 10 segundos…</div>
+        )}
+      </div>
+
+      <div style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:'9px 14px', marginBottom:16, fontSize:12, color:C.textMuted }}>
         Se o PIN ficar em branco, o funcionário entra diretamente com o código de utilizador.
       </div>
-      <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:13, cursor:'pointer', marginBottom:18, color:C.textSub }}>
+
+      <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:14, cursor:'pointer', marginBottom:20, color:C.textSub }}>
         <input type="checkbox" checked={f.ativo} onChange={e=>set('ativo',e.target.checked)}/> Funcionário ativo
       </label>
+
       <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-        <button onClick={onCancel} style={{ padding:'6px 14px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, color:C.textSub }}>Cancelar</button>
-        <button onClick={()=>onSave(f)} style={{ padding:'6px 16px', background:C.yellow, border:'none', borderRadius:8, fontSize:13, fontWeight:700, color:C.bg }}>Guardar</button>
+        <button onClick={onCancel} style={{ padding:'8px 18px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, fontSize:14, color:C.textSub }}>Cancelar</button>
+        <button onClick={()=>onSave(f)} style={{ padding:'8px 22px', background:C.yellow, border:'none', borderRadius:8, fontSize:14, fontWeight:700, color:C.bg }}>Guardar</button>
       </div>
     </div>
   )
@@ -1006,14 +1168,14 @@ function SecConsumos({ consumos, funcionarios, ementas }) {
   const filtered = enriched.filter(c=>(!fDate||c.data===fDate)&&(!fMeal||c.tipo===fMeal))
   const stats = { total:filtered.length, a:filtered.filter(c=>c.tipo==='A').length, j:filtered.filter(c=>c.tipo==='J').length }
   const iS = { padding:'7px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, background:C.surface3, color:C.text }
-  const thS = { padding:'8px 12px', textAlign:'left', fontSize:9, fontWeight:700, color:C.textMuted, textTransform:'uppercase' }
+  const thS = { padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:700, color:C.textMuted, textTransform:'uppercase' }
   return (
     <div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:16 }}>
         {[{l:'Total',v:stats.total},{l:'Almoços',v:stats.a},{l:'Jantares',v:stats.j}].map(s=>(
           <div key={s.l} style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:14, textAlign:'center' }}>
-            <div style={{ fontSize:28, fontWeight:700, color:C.yellow }}>{s.v}</div>
-            <div style={{ fontSize:11, color:C.textSub, marginTop:2 }}>{s.l}</div>
+            <div style={{ fontSize:34, fontWeight:700, color:C.yellow }}>{s.v}</div>
+            <div style={{ fontSize:13, color:C.textSub, marginTop:2 }}>{s.l}</div>
           </div>
         ))}
       </div>
@@ -1036,11 +1198,11 @@ function SecConsumos({ consumos, funcionarios, ementas }) {
               const ps=pratoStyle(c.pratoLabel)
               return (
                 <tr key={c.id} style={{ borderTop:`1px solid ${C.border}` }}>
-                  <td style={{ padding:'8px 12px' }}><div style={{ display:'flex', alignItems:'center', gap:8 }}><Avatar nome={c.nome} foto={c.foto} size={24}/><div><div style={{ fontSize:12, fontWeight:500, color:C.text }}>{c.nome}</div><div style={{ fontSize:9, color:C.textMuted }}>{c.numero}</div></div></div></td>
-                  <td style={{ padding:'8px 12px', fontSize:11, color:C.textSub }}>{fmtS(c.data)}</td>
-                  <td style={{ padding:'8px 12px', fontSize:12, color:C.textSub }}>{c.tipo==='A'?'🌞 Almoço':'🌙 Jantar'}</td>
+                  <td style={{ padding:'8px 12px' }}><div style={{ display:'flex', alignItems:'center', gap:8 }}><Avatar nome={c.nome} foto={c.foto} size={24}/><div><div style={{ fontSize:14, fontWeight:500, color:C.text }}>{c.nome}</div><div style={{ fontSize:11, color:C.textMuted }}>{c.numero}</div></div></div></td>
+                  <td style={{ padding:'8px 12px', fontSize:13, color:C.textSub }}>{fmtS(c.data)}</td>
+                  <td style={{ padding:'8px 12px', fontSize:14, color:C.textSub }}>{c.tipo==='A'?'🌞 Almoço':'🌙 Jantar'}</td>
                   <td style={{ padding:'8px 12px' }}><PratoTag label={c.pratoLabel}/></td>
-                  <td style={{ padding:'8px 12px', fontSize:11, color:C.textMuted }}>{fmtHM(c.validado_em)}</td>
+                  <td style={{ padding:'8px 12px', fontSize:13, color:C.textMuted }}>{fmtHM(c.validado_em)}</td>
                 </tr>
               )
             })}</tbody>
