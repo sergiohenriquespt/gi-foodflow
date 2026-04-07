@@ -659,8 +659,14 @@ function TerminalValidacoes({ funcionarios, ementas, marcacoes, consumos, setCon
         const lines = buffer.split(/[\r\n]+/)
         buffer = lines.pop()
         for (const line of lines) {
-          const uid = line.trim()
-          if (uid && isMounted.current) process(uid, true)
+          const uid = line.replace(/[^\x21-\x7E]/g, '').trim()
+          if (uid.length >= 2 && isMounted.current) process(uid, true)
+        }
+        // Alguns leitores enviam só CR sem LF — verifica buffer acumulado
+        const bufClean = buffer.replace(/[^\x21-\x7E]/g, '').trim()
+        if (bufClean.length >= 4 && isMounted.current) {
+          process(bufClean, true)
+          buffer = ''
         }
       }
       reader.releaseLock()
