@@ -62,7 +62,7 @@ const uid = () => ++_id
 // DADOS DE EXEMPLO
 // ═════════════════════════════════════════════════════════════════════════════
 const SEED_FUNC = [
-  { id:1, numero:'001', nome:'Ana Silva',      pin:'1234', rfid:'CARD001', foto:null, ativo:true },
+  { id:1, numero:'001', nome:'Ana Silva',      pin:'1234', rfid:'0400150674', foto:null, ativo:true },
   { id:2, numero:'002', nome:'Bruno Costa',    pin:'5678', rfid:'CARD002', foto:null, ativo:true },
   { id:3, numero:'003', nome:'Carla Mendes',   pin:'',     rfid:'CARD003', foto:null, ativo:true }, // sem PIN
   { id:4, numero:'004', nome:'David Santos',   pin:'3456', rfid:'CARD004', foto:null, ativo:true },
@@ -164,7 +164,7 @@ function BigKeypad({ value, onChange, onConfirm, maxLen=10, confirmLabel='→', 
 }
 
 // Ecrã de entrada numérica (usado nas duas etapas de identificação)
-function InputScreen({ title, subtitle, value, onChange, onConfirm, onBack, confirmLabel, hint, error, children, serialStatus, onConnectSerial }) {
+function InputScreen({ title, subtitle, value, onChange, onConfirm, onBack, confirmLabel, hint, error, children, serialStatus, serialErrMsg, onConnectSerial }) {
   return (
     <div style={{ minHeight:'100vh', background:C.bg, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center' }}>
       {onBack && (
@@ -207,6 +207,13 @@ function InputScreen({ title, subtitle, value, onChange, onConfirm, onBack, conf
                 <Icon name="card" size={16} color={C.yellow}/>
                 {serialStatus === 'error' ? '⚠ Religar leitor RFID' : 'Conectar leitor RFID'}
               </button>
+            )}
+            {serialStatus === 'error' && serialErrMsg && (
+              <div style={{ marginTop:8, fontSize:11, color:C.danger, textAlign:'center', lineHeight:1.4 }}>
+                {serialErrMsg.includes('already') || serialErrMsg.includes('open')
+                  ? '⚠ Porta já em uso — outro programa pode estar a usá-la (ex: outra tab do browser).'
+                  : `⚠ ${serialErrMsg}`}
+              </div>
             )}
           </div>
         )}
@@ -263,8 +270,9 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
   const [func,       setFunc]       = useState(null)
   const [err,        setErr]        = useState('')
   const [selDay,     setSelDay]     = useState(TODAY)
-  const [serialStatus, setSerialStatus] = useState('idle')
-  const [rfidMsg,    setRfidMsg]    = useState('') // feedback de cartão lido mas não encontrado
+  const [serialStatus,  setSerialStatus]  = useState('idle')
+  const [serialErrMsg,  setSerialErrMsg]  = useState('')
+  const [rfidMsg,       setRfidMsg]       = useState('') // feedback de cartão lido mas não encontrado
   const rfidRef      = useRef('')
   const rfidTimer    = useRef(null)
   const serialPort   = useRef(null)
@@ -309,11 +317,23 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
     try {
       setSerialStatus('connecting')
       serialPort.current = port
-      await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' })
+      // Se a porta ficou aberta de uma sessão anterior, fecha e reabre
+      try {
+        await port.open({ baudRate:9600, dataBits:8, stopBits:1, parity:'none' })
+      } catch (_openErr) {
+        try { await port.close() } catch (_) {}
+        await new Promise(r => setTimeout(r, 250))
+        await port.open({ baudRate:9600, dataBits:8, stopBits:1, parity:'none' })
+      }
       if (!isMounted.current) { await port.close(); return }
       setSerialStatus('connected')
       startSerialReadingM(port)
-    } catch (e) { if (isMounted.current) setSerialStatus('error') }
+    } catch (e) {
+      if (isMounted.current) {
+        setSerialStatus('error')
+        setSerialErrMsg(e?.message || 'Erro ao abrir porta série')
+      }
+    }
   }
 
   const startSerialReadingM = async (port) => {
@@ -329,7 +349,13 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
         buffer = lines.pop()
         for (const line of lines) {
           const uid = line.replace(/[^\x21-\x7E]/g, '').trim()
-          if (uid && isMounted.current) handleRfid(uid)
+          if (uid.length >= 2 && isMounted.current) handleRfid(uid)
+        }
+        // Alguns leitores enviam só CR sem LF — verifica buffer acumulado
+        const bufClean = buffer.replace(/[^\x21-\x7E]/g, '').trim()
+        if (bufClean.length >= 4 && isMounted.current) {
+          handleRfid(bufClean)
+          buffer = ''
         }
       }
       reader.releaseLock()
@@ -339,13 +365,22 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
   const closeSerialPortM = async () => {
     try {
       if (serialReader.current) { await serialReader.current.cancel(); serialReader.current = null }
-      if (serialPort.current?.readable) { await serialPort.current.close(); serialPort.current = null }
+      if (serialPort.current) { await serialPort.current.close(); serialPort.current = null }
     } catch (_) {}
   }
 
   const connectSerialM = async () => {
     if (!navigator.serial) return
-    try { const port = await navigator.serial.requestPort(); await openSerialPortM(port) } catch (_) {}
+    try {
+      const port = await navigator.serial.requestPort()
+      await openSerialPortM(port)
+    } catch (e) {
+      // Utilizador cancelou o diálogo — não é erro
+      if (e?.name !== 'NotFoundError' && isMounted.current) {
+        setSerialStatus('error')
+        setSerialErrMsg(e?.message || 'Porta não selecionada')
+      }
+    }
   }
 
   const handleRfid = (val) => {
@@ -393,6 +428,7 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
       confirmLabel="→"
       error={err}
       serialStatus={serialStatus}
+      serialErrMsg={serialErrMsg}
       onConnectSerial={connectSerialM}>
       {/* caixinha de demo */}
       <div style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:10, padding:'10px 14px', marginBottom:18 }}>
@@ -426,6 +462,7 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
       confirmLabel="→"
       error={err}
       serialStatus={serialStatus}
+      serialErrMsg={serialErrMsg}
       onConnectSerial={connectSerialM}>
       {/* mostra quem está a entrar */}
       <div style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 16px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:12, marginBottom:18 }}>
@@ -635,7 +672,7 @@ function TerminalValidacoes({ funcionarios, ementas, marcacoes, consumos, setCon
   const closeSerialPort = async () => {
     try {
       if (serialReader.current) { await serialReader.current.cancel(); serialReader.current = null }
-      if (serialPort.current?.readable) { await serialPort.current.close(); serialPort.current = null }
+      if (serialPort.current) { await serialPort.current.close(); serialPort.current = null }
     } catch (_) {}
   }
 
