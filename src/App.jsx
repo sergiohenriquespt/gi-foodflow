@@ -447,14 +447,18 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
 // Fluxo: código de funcionário → resultado imediato
 // ═════════════════════════════════════════════════════════════════════════════
 function TerminalValidacoes({ funcionarios, ementas, marcacoes, consumos, setConsumos, onBack }) {
-  const [numInput,   setNumInput]   = useState('')
-  const [status,     setStatus]     = useState(null)
-  const [recentes,   setRecentes]   = useState([])
-  const [manualMode, setManualMode] = useState(false)
+  const [numInput,      setNumInput]      = useState('')
+  const [status,        setStatus]        = useState(null)
+  const [recentes,      setRecentes]      = useState([])
+  const [manualMode,    setManualMode]    = useState(false)
+  const [serialStatus,  setSerialStatus]  = useState('idle') // 'idle'|'connecting'|'connected'|'error'
   const meal = mealNow()
 
-  const rfidRef   = useRef('')
-  const rfidTimer = useRef(null)
+  const rfidRef      = useRef('')
+  const rfidTimer    = useRef(null)
+  const serialPort   = useRef(null)
+  const serialReader = useRef(null)
+  const isMounted    = useRef(true)
 
   useEffect(() => {
     if (status?.type === 'no-marc') return
@@ -470,6 +474,77 @@ function TerminalValidacoes({ funcionarios, ementas, marcacoes, consumos, setCon
   }, [status, funcionarios, ementas, marcacoes, consumos])
 
   const reset = () => { setNumInput(''); setStatus(null); setManualMode(false) }
+
+  // ── Web Serial API — leitura do RD200-LF-G na COM8 ──────────────────────
+  // Auto-connect na montagem do componente (usa permissões já guardadas)
+  useEffect(() => {
+    isMounted.current = true
+    if (!navigator.serial) return
+
+    const autoConnect = async () => {
+      try {
+        const ports = await navigator.serial.getPorts()
+        if (ports.length > 0 && isMounted.current) await openSerialPort(ports[0])
+      } catch (_) {}
+    }
+    autoConnect()
+
+    return () => {
+      isMounted.current = false
+      closeSerialPort()
+    }
+  }, [])
+
+  const openSerialPort = async (port) => {
+    try {
+      setSerialStatus('connecting')
+      serialPort.current = port
+      await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' })
+      if (!isMounted.current) { await port.close(); return }
+      setSerialStatus('connected')
+      startSerialReading(port)
+    } catch (e) {
+      if (isMounted.current) setSerialStatus('error')
+    }
+  }
+
+  const startSerialReading = async (port) => {
+    let buffer = ''
+    try {
+      const reader = port.readable.getReader()
+      serialReader.current = reader
+      while (isMounted.current) {
+        const { value, done } = await reader.read()
+        if (done) break
+        buffer += new TextDecoder().decode(value)
+        const lines = buffer.split(/[\r\n]+/)
+        buffer = lines.pop()
+        for (const line of lines) {
+          const uid = line.trim()
+          if (uid && isMounted.current) process(uid, true)
+        }
+      }
+      reader.releaseLock()
+    } catch (_) {
+      if (isMounted.current) setSerialStatus('error')
+    }
+  }
+
+  const closeSerialPort = async () => {
+    try {
+      if (serialReader.current) { await serialReader.current.cancel(); serialReader.current = null }
+      if (serialPort.current?.readable) { await serialPort.current.close(); serialPort.current = null }
+    } catch (_) {}
+  }
+
+  const connectSerial = async () => {
+    if (!navigator.serial) return
+    try {
+      const port = await navigator.serial.requestPort()
+      await openSerialPort(port)
+    } catch (_) {}
+  }
+
 
   const confirmarConsumo = (func, ementa, pratoNum) => {
     const pk = `prato${pratoNum}`
@@ -587,7 +662,12 @@ function TerminalValidacoes({ funcionarios, ementas, marcacoes, consumos, setCon
             {meal==='A' ? '🌞 Almoço' : '🌙 Jantar'}
           </div>
           <div style={{ fontSize:16, color:C.textSub, marginBottom:6 }}>Aproxime o cartão</div>
-          <div style={{ fontSize:13, color:C.textMuted }}>O leitor está ativo e à espera</div>
+          {serialStatus === 'connected'
+            ? <div style={{ fontSize:13, color:C.success, fontWeight:600 }}>Leitor ativo · à espera de cartão</div>
+            : serialStatus === 'connecting'
+            ? <div style={{ fontSize:13, color:C.warn }}>A ligar ao leitor…</div>
+            : <div style={{ fontSize:13, color:C.danger }}>Leitor não ligado — usa o botão no topo</div>
+          }
         </div>
         {/* Botão para entrada manual — secundário, bem visível para a cozinheira */}
         <div style={{ borderTop:`1px solid ${C.border}`, padding:'18px 32px' }}>
@@ -631,8 +711,30 @@ function TerminalValidacoes({ funcionarios, ementas, marcacoes, consumos, setCon
       {/* Header */}
       <div style={{ background:C.surface, borderBottom:`1px solid ${C.border}`, padding:'0 20px', height:56, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
         <Logo size="sm" showSub={false} />
-        <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:14 }}>
           <span style={{ fontSize:13, color:C.textMuted }}>{meal==='A'?'🌞 Almoço':'🌙 Jantar'} · {new Date().toLocaleDateString('pt-PT')}</span>
+
+          {/* Indicador de estado do leitor RFID */}
+          {!navigator.serial ? (
+            <span style={{ fontSize:11, color:C.warn, background:C.warnBg, border:`1px solid ${C.warn}33`, borderRadius:6, padding:'3px 10px', fontWeight:600 }}>
+              Leitor RFID: browser sem suporte (usa Chrome)
+            </span>
+          ) : serialStatus === 'connected' ? (
+            <span style={{ fontSize:11, color:C.success, background:C.successBg, border:`1px solid ${C.success}33`, borderRadius:6, padding:'3px 10px', fontWeight:600, display:'flex', alignItems:'center', gap:5 }}>
+              <span style={{ width:6, height:6, borderRadius:'50%', background:C.success, display:'inline-block' }} />
+              Leitor ligado
+            </span>
+          ) : serialStatus === 'connecting' ? (
+            <span style={{ fontSize:11, color:C.warn, background:C.warnBg, border:`1px solid ${C.warn}33`, borderRadius:6, padding:'3px 10px' }}>
+              A ligar…
+            </span>
+          ) : (
+            <button onClick={connectSerial}
+              style={{ fontSize:12, fontWeight:600, color:C.yellow, background:C.yellow+'18', border:`1px solid ${C.yellow}55`, borderRadius:8, padding:'5px 14px', height:34 }}>
+              {serialStatus === 'error' ? '⚠ Religar leitor' : 'Conectar leitor RFID'}
+            </button>
+          )}
+
           <button onClick={onBack} style={{ background:'none', border:'none', color:C.textMuted, fontSize:13 }}>← Sair</button>
         </div>
       </div>
