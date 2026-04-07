@@ -257,14 +257,14 @@ function ModeSelector({ onSelect }) {
 // Fluxo: código de funcionário → PIN (se tiver) → dashboard
 // ═════════════════════════════════════════════════════════════════════════════
 function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onBack }) {
-  const [step,     setStep]     = useState('numero')   // 'numero' | 'pin' | 'dashboard'
-  const [numInput, setNumInput] = useState('')
-  const [pinInput, setPinInput] = useState('')
-  const [func,     setFunc]     = useState(null)
-  const [err,      setErr]      = useState('')
-  const [selDay,   setSelDay]   = useState(TODAY)
-
-  const [serialStatus,  setSerialStatus]  = useState('idle') // 'idle'|'connecting'|'connected'|'error'
+  const [step,       setStep]       = useState('numero')
+  const [numInput,   setNumInput]   = useState('')
+  const [pinInput,   setPinInput]   = useState('')
+  const [func,       setFunc]       = useState(null)
+  const [err,        setErr]        = useState('')
+  const [selDay,     setSelDay]     = useState(TODAY)
+  const [serialStatus, setSerialStatus] = useState('idle')
+  const [rfidMsg,    setRfidMsg]    = useState('') // feedback de cartão lido mas não encontrado
   const rfidRef      = useRef('')
   const rfidTimer    = useRef(null)
   const serialPort   = useRef(null)
@@ -328,7 +328,7 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
         const lines = buffer.split(/[\r\n]+/)
         buffer = lines.pop()
         for (const line of lines) {
-          const uid = line.trim()
+          const uid = line.replace(/[^\x21-\x7E]/g, '').trim()
           if (uid && isMounted.current) handleRfid(uid)
         }
       }
@@ -349,8 +349,17 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
   }
 
   const handleRfid = (val) => {
-    const f = funcionarios.find(f => f.rfid === val.trim())
-    if (!f || !f.ativo) return
+    // Remove caracteres de controlo (STX, ETX, etc.) antes de comparar
+    const uid = val.replace(/[^\x21-\x7E]/g, '').trim()
+    if (!uid) return
+    const f = funcionarios.find(f => f.rfid === uid)
+    if (!f || !f.ativo) {
+      // Cartão lido mas UID não configurado — mostra feedback útil
+      setRfidMsg(`Cartão lido: ${uid} — não encontrado. Configura o UID na ficha do funcionário.`)
+      setTimeout(() => setRfidMsg(''), 5000)
+      return
+    }
+    setRfidMsg('')
     loginFunc(f)
   }
 
@@ -398,6 +407,11 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
           ))}
         </div>
       </div>
+      {rfidMsg && (
+        <div style={{ background:C.warnBg, border:`1px solid ${C.warn}44`, borderRadius:8, padding:'8px 12px', marginBottom:12, fontSize:11, color:C.warn, lineHeight:1.4 }}>
+          {rfidMsg}
+        </div>
+      )}
     </InputScreen>
   )
 
@@ -928,44 +942,44 @@ function SecEmentas({ ementas, setEmentas }) {
   if (editing) return <EmentaEditor ementa={editing} onSave={save} onCancel={()=>setEditing(null)} />
   return (
     <div style={{ display:'flex', gap:18 }}>
-      <div style={{ width:148, flexShrink:0 }}>
-        <div style={{ fontSize:9, fontWeight:700, color:C.textMuted, textTransform:'uppercase', letterSpacing:1, marginBottom:8, paddingLeft:12 }}>14 dias</div>
+      <div style={{ width:175, flexShrink:0 }}>
+        <div style={{ fontSize:11, fontWeight:700, color:C.textMuted, textTransform:'uppercase', letterSpacing:1, marginBottom:8, paddingLeft:12 }}>14 dias</div>
         {dates.map(d => {
           const dd=new Date(d+'T12:00:00'), isT=d===TODAY, hasEm=ementas.some(e=>e.data===d)
           return (
             <button key={d} onClick={()=>setSelD(d)} style={{ width:'100%', padding:'8px 12px', textAlign:'left', background:selD===d?C.yellow+'12':C.surface, border:'none', borderLeft:selD===d?`3px solid ${C.yellow}`:'3px solid transparent', marginBottom:1, borderRadius:'0 6px 6px 0' }}>
-              <div style={{ fontSize:9, fontWeight:700, color:isT?C.yellow:C.text }}>{isT?'HOJE':WD[dd.getDay()].toUpperCase()}</div>
-              <div style={{ fontSize:9, color:C.textSub }}>{dd.getDate()} {MN[dd.getMonth()]}</div>
-              {hasEm && <div style={{ fontSize:8, color:C.success, marginTop:1 }}>● ementa</div>}
+              <div style={{ fontSize:13, fontWeight:700, color:isT?C.yellow:C.text }}>{isT?'HOJE':WD[dd.getDay()].toUpperCase()}</div>
+              <div style={{ fontSize:12, color:C.textSub }}>{dd.getDate()} {MN[dd.getMonth()]}</div>
+              {hasEm && <div style={{ fontSize:11, color:C.success, marginTop:1 }}>● ementa</div>}
             </button>
           )
         })}
       </div>
       <div style={{ flex:1 }}>
-        <div style={{ fontSize:14, fontWeight:600, color:C.text, marginBottom:14, display:'flex', alignItems:'center', gap:8 }}>
-          {fmtF(selD)} {selD===TODAY&&<span style={{ background:C.yellow+'22', color:C.yellow, border:`1px solid ${C.yellow}44`, fontSize:9, padding:'2px 7px', borderRadius:4, fontWeight:700 }}>HOJE</span>}
+        <div style={{ fontSize:17, fontWeight:600, color:C.text, marginBottom:14, display:'flex', alignItems:'center', gap:8 }}>
+          {fmtF(selD)} {selD===TODAY&&<span style={{ background:C.yellow+'22', color:C.yellow, border:`1px solid ${C.yellow}44`, fontSize:11, padding:'2px 7px', borderRadius:4, fontWeight:700 }}>HOJE</span>}
         </div>
         {['A','J'].map(tipo => {
           const em = dayEm.find(e=>e.tipo===tipo)
           return (
             <div key={tipo} style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:14, marginBottom:10 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:em?10:0 }}>
-                <span style={{ fontSize:13, fontWeight:600, color:C.text }}>{tipo==='A'?'🌞 Almoço':'🌙 Jantar'}</span>
+                <span style={{ fontSize:16, fontWeight:600, color:C.text }}>{tipo==='A'?'🌞 Almoço':'🌙 Jantar'}</span>
                 <div style={{ display:'flex', gap:6 }}>
                   {em ? (<>
-                    <button onClick={()=>setEditing({...em})} style={{ fontSize:11, padding:'4px 10px', background:C.yellow+'22', border:`1px solid ${C.yellow}55`, borderRadius:6, fontWeight:600, color:C.yellow }}>Editar</button>
-                    <button onClick={()=>del(em.id)} style={{ fontSize:11, padding:'4px 10px', background:C.dangerBg, border:`1px solid ${C.danger}33`, borderRadius:6, color:C.danger }}>Remover</button>
+                    <button onClick={()=>setEditing({...em})} style={{ fontSize:13, padding:'5px 12px', background:C.yellow+'22', border:`1px solid ${C.yellow}55`, borderRadius:6, fontWeight:600, color:C.yellow }}>Editar</button>
+                    <button onClick={()=>del(em.id)} style={{ fontSize:13, padding:'5px 12px', background:C.dangerBg, border:`1px solid ${C.danger}33`, borderRadius:6, color:C.danger }}>Remover</button>
                   </>) : (
-                    <button onClick={()=>add(tipo)} style={{ fontSize:11, padding:'4px 12px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, color:C.textSub }}>+ Adicionar ementa</button>
+                    <button onClick={()=>add(tipo)} style={{ fontSize:13, padding:'5px 14px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, color:C.textSub }}>+ Adicionar ementa</button>
                   )}
                 </div>
               </div>
               {em && <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:7 }}>
                 {[1,2,3,4].map(n => {
                   const l=em[`prato${n}_label`], d=em[`prato${n}_desc`]
-                  if (!l) return <div key={n} style={{ background:C.surface2, borderRadius:6, padding:'7px 10px', border:`1px dashed ${C.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}><span style={{ fontSize:12, color:C.textMuted }}>Slot {n} vazio</span></div>
+                  if (!l) return <div key={n} style={{ background:C.surface2, borderRadius:6, padding:'7px 10px', border:`1px dashed ${C.border}`, display:'flex', alignItems:'center', justifyContent:'center' }}><span style={{ fontSize:13, color:C.textMuted }}>Slot {n} vazio</span></div>
                   const ps=pratoStyle(l)
-                  return <div key={n} style={{ background:ps.bg, border:`1px solid ${ps.border}`, borderRadius:6, padding:'7px 10px' }}><div style={{ fontSize:10, fontWeight:700, color:ps.color }}>{l}</div><div style={{ fontSize:11, color:C.textSub, marginTop:1 }}>{d||<span style={{ color:C.textMuted, fontStyle:'italic' }}>sem descrição</span>}</div></div>
+                  return <div key={n} style={{ background:ps.bg, border:`1px solid ${ps.border}`, borderRadius:6, padding:'7px 10px' }}><div style={{ fontSize:13, fontWeight:700, color:ps.color }}>{l}</div><div style={{ fontSize:14, color:C.textSub, marginTop:2 }}>{d||<span style={{ color:C.textMuted, fontStyle:'italic' }}>sem descrição</span>}</div></div>
                 })}
               </div>}
             </div>
@@ -979,22 +993,22 @@ function SecEmentas({ ementas, setEmentas }) {
 function EmentaEditor({ ementa, onSave, onCancel }) {
   const [f, setF] = useState({...ementa})
   const set = (k,v) => setF(p=>({...p,[k]:v}))
-  const iS = { padding:'7px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, background:C.surface3, color:C.text }
+  const iS = { padding:'9px 12px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:14, background:C.surface3, color:C.text }
   return (
     <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:12, padding:22, maxWidth:560 }}>
       <div style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:18 }}>{f.tipo==='A'?'🌞 Almoço':'🌙 Jantar'} · {fmtF(f.data)}</div>
       {[1,2,3,4].map(n => (
         <div key={n} style={{ marginBottom:12, padding:12, background:C.surface2, borderRadius:8, border:`1px solid ${C.border}` }}>
-          <div style={{ fontSize:11, fontWeight:700, color:C.textMuted, marginBottom:7, textTransform:'uppercase', letterSpacing:.5 }}>Prato {n} — tipo em branco oculta o slot</div>
+          <div style={{ fontSize:12, fontWeight:700, color:C.textMuted, marginBottom:7, textTransform:'uppercase', letterSpacing:.5 }}>Prato {n} — tipo em branco oculta o slot</div>
           <div style={{ display:'flex', gap:8 }}>
-            <input value={f[`prato${n}_label`]} onChange={e=>set(`prato${n}_label`,e.target.value)} placeholder="Tipo (ex: Carne)" style={{...iS, width:130, flexShrink:0}} />
+            <input value={f[`prato${n}_label`]} onChange={e=>set(`prato${n}_label`,e.target.value)} placeholder="Tipo (ex: Carne)" style={{...iS, width:140, flexShrink:0}} />
             <input value={f[`prato${n}_desc`]}  onChange={e=>set(`prato${n}_desc`, e.target.value)} placeholder="Descrição do prato"  style={{...iS, flex:1}} />
           </div>
         </div>
       ))}
       <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:6 }}>
-        <button onClick={onCancel} style={{ padding:'7px 14px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, fontSize:13, color:C.textSub }}>Cancelar</button>
-        <button onClick={()=>onSave(f)} style={{ padding:'7px 18px', background:C.yellow, border:'none', borderRadius:8, fontSize:13, fontWeight:700, color:C.bg }}>Guardar</button>
+        <button onClick={onCancel} style={{ padding:'9px 18px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, fontSize:14, color:C.textSub }}>Cancelar</button>
+        <button onClick={()=>onSave(f)} style={{ padding:'9px 22px', background:C.yellow, border:'none', borderRadius:8, fontSize:14, fontWeight:700, color:C.bg }}>Guardar</button>
       </div>
     </div>
   )
@@ -1045,44 +1059,67 @@ function FuncionarioEditor({ form:init, onSave, onCancel }) {
 
   // Lê um único UID do cartão e preenche o campo RFID
   const readRfidCard = async () => {
-    if (!navigator.serial) { alert('Web Serial não disponível. Usa Chrome ou Edge.'); return }
+    if (!navigator.serial) { alert('Requer Chrome ou Edge com suporte a Web Serial.'); return }
     setRfidState('waiting')
     let port = null
+    let reader = null
+    let found = false
     try {
-      // Tenta porta já autorizada, ou pede seleção
       const ports = await navigator.serial.getPorts()
       port = ports.length > 0 ? ports[0] : await navigator.serial.requestPort()
-      await port.open({ baudRate: 9600, dataBits: 8, stopBits: 1, parity: 'none' })
-      const reader = port.readable.getReader()
+      // Tenta abrir — se falhar (porta deixada aberta), fecha e reabre
+      try {
+        await port.open({ baudRate:9600, dataBits:8, stopBits:1, parity:'none' })
+      } catch (_openErr) {
+        try { await port.close() } catch (_) {}
+        await new Promise(r => setTimeout(r, 200))
+        await port.open({ baudRate:9600, dataBits:8, stopBits:1, parity:'none' })
+      }
+      reader = port.readable.getReader()
       let buffer = ''
-      // Lê até encontrar uma linha completa (timeout 10s)
-      const timeout = setTimeout(async () => {
-        try { await reader.cancel() } catch (_) {}
-      }, 10000)
+      // Cancela leitura ao fim de 10s
+      const tid = setTimeout(() => reader.cancel().catch(()=>{}), 10000)
       try {
         while (true) {
           const { value, done } = await reader.read()
           if (done) break
           buffer += new TextDecoder().decode(value)
-          const lines = buffer.split(/[\r\n]+/)
-          const uid = lines.find(l => l.trim())
-          if (uid) {
-            clearTimeout(timeout)
-            set('rfid', uid.trim())
-            setRfidState('done')
-            setTimeout(() => setRfidState('idle'), 2000)
-            break
+          // Divide em linhas (CR, LF ou ambos)
+          const parts = buffer.split(/\r?\n/)
+          buffer = parts.pop() || ''
+          for (const part of parts) {
+            // Remove TODOS os caracteres não-imprimíveis (STX, ETX, etc.)
+            const uid = part.replace(/[^\x21-\x7E]/g, '').trim()
+            if (uid.length >= 2) {
+              clearTimeout(tid); found = true
+              set('rfid', uid)
+              setRfidState('done')
+              setTimeout(() => setRfidState('idle'), 2500)
+              return
+            }
           }
-          buffer = lines[lines.length - 1]
+          // Alguns leitores não enviam LF — verifica o buffer acumulado
+          const bufClean = buffer.replace(/[^\x21-\x7E]/g, '').trim()
+          if (bufClean.length >= 4) {
+            clearTimeout(tid); found = true
+            set('rfid', bufClean)
+            setRfidState('done')
+            setTimeout(() => setRfidState('idle'), 2500)
+            return
+          }
         }
       } finally {
-        reader.releaseLock()
+        clearTimeout(tid)
       }
-    } catch (e) {
-      setRfidState('error')
-      setTimeout(() => setRfidState('idle'), 3000)
-    } finally {
-      try { if (port?.readable) await port.close() } catch (_) {}
+    } catch (_) {}
+    finally {
+      // OBRIGATÓRIO: releaseLock antes de close
+      if (reader) { try { reader.releaseLock() } catch (_) {} }
+      if (port)   { try { await port.close()   } catch (_) {} }
+      if (!found) {
+        setRfidState('error')
+        setTimeout(() => setRfidState('idle'), 3000)
+      }
     }
   }
 
@@ -1167,7 +1204,7 @@ function SecConsumos({ consumos, funcionarios, ementas }) {
   }).filter(Boolean)
   const filtered = enriched.filter(c=>(!fDate||c.data===fDate)&&(!fMeal||c.tipo===fMeal))
   const stats = { total:filtered.length, a:filtered.filter(c=>c.tipo==='A').length, j:filtered.filter(c=>c.tipo==='J').length }
-  const iS = { padding:'7px 10px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:12, background:C.surface3, color:C.text }
+  const iS = { padding:'9px 12px', borderRadius:6, border:`1px solid ${C.border}`, fontSize:14, background:C.surface3, color:C.text }
   const thS = { padding:'10px 14px', textAlign:'left', fontSize:11, fontWeight:700, color:C.textMuted, textTransform:'uppercase' }
   return (
     <div>
