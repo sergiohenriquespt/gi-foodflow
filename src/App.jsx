@@ -447,9 +447,10 @@ function TerminalMarcacoes({ funcionarios, ementas, marcacoes, setMarcacoes, onB
 // Fluxo: código de funcionário → resultado imediato
 // ═════════════════════════════════════════════════════════════════════════════
 function TerminalValidacoes({ funcionarios, ementas, marcacoes, consumos, setConsumos, onBack }) {
-  const [numInput, setNumInput] = useState('')
-  const [status,   setStatus]   = useState(null)
-  const [recentes, setRecentes] = useState([])
+  const [numInput,   setNumInput]   = useState('')
+  const [status,     setStatus]     = useState(null)
+  const [recentes,   setRecentes]   = useState([])
+  const [manualMode, setManualMode] = useState(false)
   const meal = mealNow()
 
   const rfidRef   = useRef('')
@@ -468,7 +469,7 @@ function TerminalValidacoes({ funcionarios, ementas, marcacoes, consumos, setCon
     return () => { window.removeEventListener('keydown', handler); clearTimeout(rfidTimer.current) }
   }, [status, funcionarios, ementas, marcacoes, consumos])
 
-  const reset = () => { setNumInput(''); setStatus(null) }
+  const reset = () => { setNumInput(''); setStatus(null); setManualMode(false) }
 
   const confirmarConsumo = (func, ementa, pratoNum) => {
     const pk = `prato${pratoNum}`
@@ -572,28 +573,53 @@ function TerminalValidacoes({ funcionarios, ementas, marcacoes, consumos, setCon
       </div>
     )
 
-    // Standby — teclado numérico central
-    return (
-      <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:24 }}>
-        {/* Zona de display */}
-        <div style={{ padding:'28px 32px 22px', textAlign:'center', borderBottom:`1px solid ${C.border}` }}>
-          <div style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:60, height:60, borderRadius:'50%', background:C.surface2, marginBottom:14 }}>
-            <Icon name="card" size={26} color={C.yellow} />
+    // Standby — modo RFID por defeito, teclado manual opcional
+    if (!manualMode) return (
+      <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:24, overflow:'hidden' }}>
+        {/* Zona de espera — visualmente proeminente */}
+        <div style={{ padding:'44px 32px 40px', textAlign:'center' }}>
+          {/* Ícone pulsante via CSS animation inline */}
+          <div style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:100, height:100, borderRadius:'50%', background:C.yellow+'18', border:`2px solid ${C.yellow}44`, marginBottom:22, position:'relative' }}>
+            <div style={{ position:'absolute', inset:0, borderRadius:'50%', border:`2px solid ${C.yellow}33`, animation:'none', opacity:.5 }} />
+            <Icon name="card" size={46} color={C.yellow} />
           </div>
-          <div style={{ fontSize:19, fontWeight:700, color:C.text, marginBottom:4 }}>
+          <div style={{ fontSize:22, fontWeight:800, color:C.text, marginBottom:8 }}>
             {meal==='A' ? '🌞 Almoço' : '🌙 Jantar'}
           </div>
-          <div style={{ fontSize:13, color:C.textSub, marginBottom:16 }}>Introduza o código de funcionário</div>
-          {/* Display do código digitado */}
+          <div style={{ fontSize:16, color:C.textSub, marginBottom:6 }}>Aproxime o cartão</div>
+          <div style={{ fontSize:13, color:C.textMuted }}>O leitor está ativo e à espera</div>
+        </div>
+        {/* Botão para entrada manual — secundário, bem visível para a cozinheira */}
+        <div style={{ borderTop:`1px solid ${C.border}`, padding:'18px 32px' }}>
+          <button onClick={()=>setManualMode(true)}
+            style={{ width:'100%', height:56, background:C.surface2, border:`1.5px solid ${C.border2}`, borderRadius:12, fontSize:15, fontWeight:600, color:C.textSub, display:'flex', alignItems:'center', justifyContent:'center', gap:10, transition:'all .15s' }}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor=C.yellow+'66';e.currentTarget.style.color=C.text}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border2;e.currentTarget.style.color=C.textSub}}>
+            <Icon name="users" size={18} color={C.textSub} />
+            Introduzir código manualmente
+          </button>
+        </div>
+      </div>
+    )
+
+    // Modo manual — teclado numérico
+    return (
+      <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:24 }}>
+        <div style={{ padding:'24px 32px 20px', textAlign:'center', borderBottom:`1px solid ${C.border}` }}>
+          <div style={{ fontSize:16, fontWeight:600, color:C.text, marginBottom:4 }}>Código de funcionário</div>
+          <div style={{ fontSize:12, color:C.textMuted, marginBottom:14 }}>Introduza o código e confirme</div>
           <div style={{ background:C.surface3, border:`1.5px solid ${C.border2}`, borderRadius:12, padding:'14px 18px', minHeight:56, display:'flex', alignItems:'center', justifyContent:'center' }}>
             {numInput
               ? <span style={{ fontSize:32, letterSpacing:14, color:C.yellow, fontWeight:600 }}>{'•'.repeat(numInput.length)}</span>
               : <span style={{ color:C.textMuted, fontSize:14 }}>Código</span>}
           </div>
         </div>
-        {/* Teclado */}
-        <div style={{ padding:'20px 32px 28px' }}>
+        <div style={{ padding:'20px 32px 24px' }}>
           <BigKeypad value={numInput} onChange={setNumInput} onConfirm={()=>process(numInput)} confirmLabel="✓" />
+          <button onClick={()=>{ setManualMode(false); setNumInput('') }}
+            style={{ width:'100%', height:48, marginTop:10, background:'transparent', border:`1px solid ${C.border}`, borderRadius:10, fontSize:13, color:C.textMuted }}>
+            ← Voltar ao leitor de cartões
+          </button>
         </div>
       </div>
     )
