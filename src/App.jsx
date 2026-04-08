@@ -162,7 +162,7 @@ function ErrorBanner({msg,onRetry}) {
   </div>
 }
 
-function InputScreen({title,subtitle,value,onChange,onConfirm,onBack,confirmLabel,error,children,serialStatus,serialErrMsg,onConnectSerial}) {
+function InputScreen({title,subtitle,value,onChange,onConfirm,onBack,confirmLabel,error,children,serialStatus,serialErrMsg,onConnectSerial,isSecret=true}) {
   return <div style={{minHeight:'100vh',background:C.bg,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
     {onBack&&<button onClick={onBack} style={{position:'absolute',top:24,left:24,background:'none',border:'none',color:C.textMuted,fontSize:14}}>← Voltar</button>}
     <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:24,padding:'36px 40px',width:440}}>
@@ -170,8 +170,12 @@ function InputScreen({title,subtitle,value,onChange,onConfirm,onBack,confirmLabe
       {children}
       <div style={{marginBottom:12}}>
         <div style={{fontSize:13,color:C.textMuted,marginBottom:8}}>{title}</div>
-        <div style={{background:C.surface3,border:`1.5px solid ${error?C.danger+'66':C.border2}`,borderRadius:12,padding:'14px 18px',textAlign:'center',minHeight:60,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          {value?<span style={{fontSize:32,letterSpacing:10,color:C.yellow,fontWeight:600}}>{'•'.repeat(value.length)}</span>:<span style={{color:C.textMuted,fontSize:15}}>{subtitle}</span>}
+        <div style={{background:C.surface3,border:`1.5px solid ${error?C.danger+'66':C.border2}`,borderRadius:12,padding:'0 18px',textAlign:'center',height:60,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',flexShrink:0}}>
+          {value
+            ? isSecret
+              ? <span style={{fontSize:30,letterSpacing:8,color:C.yellow,fontWeight:600}}>{'•'.repeat(value.length)}</span>
+              : <span style={{fontSize:28,letterSpacing:5,color:C.yellow,fontWeight:700}}>{value}</span>
+            : <span style={{color:C.textMuted,fontSize:15}}>{subtitle}</span>}
         </div>
         {error&&<div style={{marginTop:8,background:C.dangerBg,border:`1px solid ${C.danger}44`,borderRadius:8,padding:'8px 14px',fontSize:13,color:C.danger,textAlign:'center'}}>{error}</div>}
       </div>
@@ -334,6 +338,7 @@ function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
 
   if(step==='numero') return <InputScreen title="Introduza o seu código de funcionário" subtitle="Código"
     value={numInput} onChange={setNumInput} onConfirm={submitNumero} onBack={onBack} confirmLabel="→" error={err}
+    isSecret={false}
     serialStatus={serialStatus} serialErrMsg={serialErrMsg} onConnectSerial={connectSerial}>
     {rfidMsg&&<div style={{background:C.warnBg,border:`1px solid ${C.warn}44`,borderRadius:8,padding:'8px 12px',marginBottom:12,fontSize:11,color:C.warn}}>{rfidMsg}</div>}
   </InputScreen>
