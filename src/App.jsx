@@ -450,6 +450,14 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
   const [status,     setStatus]     = useState(null)
   const [recentes,   setRecentes]   = useState([])
   const [manualMode, setManualMode] = useState(false)
+  const [, setTick]  = useState(0)  // relógio interno — força re-render a cada 30s
+
+  // Reavalia mealNow() a cada 30s para detetar transições de horário
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30000)
+    return () => clearInterval(id)
+  }, [])
+
   const meal = mealNow(s)
 
   const rfidRef=useRef(''); const rfidTimer=useRef(null)
@@ -1084,6 +1092,14 @@ export default function App() {
   },[])
 
   useEffect(()=>{ reload().finally(()=>setLoading(false)) },[reload])
+
+  // Polling de definições a cada 60s — sem recarregar dados pesados
+  useEffect(()=>{
+    const id = setInterval(async () => {
+      try { const def = await fetchDefinicoes(); setSettings(def) } catch(_) {}
+    }, 60000)
+    return () => clearInterval(id)
+  }, [])
 
   if(loading) return <LoadingScreen msg="A ligar ao servidor…"/>
 
