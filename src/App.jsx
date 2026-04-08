@@ -528,6 +528,19 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
       <button onClick={reset} style={{marginTop:12,width:'100%',height:48,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:10,fontSize:14,color:C.textSub}}>Cancelar</button>
     </div>
 
+    // Cantina encerrada
+    if(!meal) return <div style={{background:C.surface,border:`2px solid ${C.danger}33`,borderRadius:24,overflow:'hidden'}}>
+      <div style={{padding:'52px 32px 48px',textAlign:'center'}}>
+        <div style={{fontSize:64,marginBottom:16}}>🔒</div>
+        <div style={{fontSize:32,fontWeight:900,color:C.danger,letterSpacing:2,marginBottom:12}}>CANTINA ENCERRADA</div>
+        {next
+          ? <div style={{fontSize:15,color:C.textSub}}>
+              Próxima refeição: <strong style={{color:C.text}}>{next.tipo==='A'?'🌞 Almoço':'🌙 Jantar'}</strong> às <strong style={{color:C.yellow}}>{next.hora}</strong>
+            </div>
+          : <div style={{fontSize:15,color:C.textMuted}}>Reabre amanhã</div>}
+      </div>
+    </div>
+
     // Standby
     if(!manualMode) return <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:24,overflow:'hidden'}}>
       <div style={{padding:'44px 32px 40px',textAlign:'center'}}>
@@ -565,7 +578,9 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
     <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 20px',height:56,display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
       <Logo size="sm" showSub={false}/>
       <div style={{display:'flex',alignItems:'center',gap:14}}>
-        <span style={{fontSize:13,color:C.textMuted}}>{meal==='A'?'🌞 Almoço':'🌙 Jantar'} · {new Date().toLocaleDateString('pt-PT')}</span>
+        <span style={{fontSize:13,color:meal?C.textMuted:C.danger}}>
+            {meal==='A'?'🌞 Almoço':meal==='J'?'🌙 Jantar':'⛔ Encerrada'} · {new Date().toLocaleDateString('pt-PT')}
+          </span>
         {navigator.serial&&(serialStatus==='connected'
           ?<span style={{fontSize:11,color:C.success,background:C.successBg,border:`1px solid ${C.success}33`,borderRadius:6,padding:'3px 10px',fontWeight:600,display:'flex',alignItems:'center',gap:5}}><span style={{width:6,height:6,borderRadius:'50%',background:C.success,display:'inline-block'}}/>Leitor ligado</span>
           :serialStatus==='connecting'?<span style={{fontSize:11,color:C.warn,background:C.warnBg,border:`1px solid ${C.warn}33`,borderRadius:6,padding:'3px 10px'}}>A ligar…</span>
