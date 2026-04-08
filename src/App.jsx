@@ -532,8 +532,8 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
     return <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:24}}>
       <div style={{padding:'24px 32px 20px',textAlign:'center',borderBottom:`1px solid ${C.border}`}}>
         <div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:4}}>Código de funcionário</div>
-        <div style={{background:C.surface3,border:`1.5px solid ${C.border2}`,borderRadius:12,padding:'14px 18px',minHeight:56,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          {numInput?<span style={{fontSize:32,letterSpacing:14,color:C.yellow,fontWeight:600}}>{'•'.repeat(numInput.length)}</span>:<span style={{color:C.textMuted,fontSize:14}}>Código</span>}
+        <div style={{background:C.surface3,border:`1.5px solid ${C.border2}`,borderRadius:12,padding:'14px 18px',height:60,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden'}}>
+          {numInput?<span style={{fontSize:28,letterSpacing:6,color:C.yellow,fontWeight:700}}>{numInput}</span>:<span style={{color:C.textMuted,fontSize:14}}>Código</span>}
         </div>
       </div>
       <div style={{padding:'20px 32px 24px'}}>
