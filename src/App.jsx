@@ -354,11 +354,13 @@ function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
   </InputScreen>
 
   // ── Dashboard ────────────────────────────────────────────────────────────
-  const antec    = s.bloquear_dia_proprio === 'true' ? 1 : 0
-  const minDay   = addD(TODAY, antec)
-  const serveFds = s.servir_fds!=='false'
+  const bloqueado = s.bloquear_dia_proprio === 'true'
+  const serveFds  = s.servir_fds !== 'false'
+  // Hoje aparece sempre (leitura); dias futuros filtrados pelas regras
   const days = [...new Set(ementas.map(e=>e.data))].sort().filter(d=>{
-    if(d<minDay) return false
+    if(d === TODAY) return true                   // hoje: sempre visível
+    if(d < TODAY) return false                    // passado: nunca
+    if(bloqueado && d === addD(TODAY,0)) return false  // redundante mas explícito
     if(!serveFds){const wd=new Date(d+'T12:00:00').getDay();if(wd===0||wd===6) return false}
     return true
   }).slice(0,14)
@@ -388,9 +390,13 @@ function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
         <div style={{padding:'12px 16px 8px',fontSize:10,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:1}}>Dias disponíveis</div>
         {days.map(d=>{
           const dd=new Date(d+'T12:00:00'),isT=d===TODAY,mc=ementas.filter(e=>e.data===d&&getM(e.id)).length,sel=selDay===d
+          const soLeitura=isT&&bloqueado
           return <button key={d} onClick={()=>setSelDay(d)}
             style={{width:'100%',height:80,padding:'0 16px',textAlign:'left',background:sel?C.yellow+'14':'transparent',border:'none',borderLeft:sel?`4px solid ${C.yellow}`:'4px solid transparent',display:'flex',flexDirection:'column',justifyContent:'center',gap:2}}>
-            <div style={{fontSize:14,fontWeight:700,color:isT?C.yellow:C.text}}>{isT?'HOJE':WD[dd.getDay()]}</div>
+            <div style={{fontSize:14,fontWeight:700,color:isT?C.yellow:C.text,display:'flex',alignItems:'center',gap:5}}>
+              {isT?'HOJE':WD[dd.getDay()]}
+              {soLeitura&&<span style={{fontSize:9,color:C.textMuted,fontWeight:400,background:C.surface2,padding:'1px 5px',borderRadius:3}}>só leitura</span>}
+            </div>
             <div style={{fontSize:12,color:C.textSub}}>{dd.getDate()} {MN[dd.getMonth()]}</div>
             {mc>0?<div style={{fontSize:11,color:C.success,fontWeight:600}}>✓ {mc} marcado{mc>1?'s':''}</div>:<div style={{fontSize:11,color:C.textMuted}}>— sem marcação</div>}
           </button>
@@ -406,19 +412,26 @@ function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
           const em=dayEm.find(e=>e.tipo===tipo); if(!em) return null
           const marc=getM(em.id)
           const pratos=[1,2,3,4].map(n=>({n,label:em[`prato${n}_label`],desc:em[`prato${n}_desc`]})).filter(p=>p.label)
-          return <div key={tipo} style={{background:C.surface,border:`2px solid ${marc?C.yellow+'55':C.border}`,borderRadius:14,padding:'16px 18px',marginBottom:16}}>
+          const readonly=selDay===TODAY&&bloqueado
+          return <div key={tipo} style={{background:C.surface,border:`2px solid ${marc?C.yellow+'55':C.border}`,borderRadius:14,padding:'16px 18px',marginBottom:16,opacity:readonly&&!marc?.prato_num?0.6:1}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
               <div style={{display:'flex',alignItems:'center',gap:10}}>
                 <span style={{fontSize:20}}>{tipo==='A'?'🌞':'🌙'}</span>
                 <span style={{fontSize:17,fontWeight:700,color:C.text}}>{tipo==='A'?'Almoço':'Jantar'}</span>
               </div>
-              {marc?<div style={{display:'flex',alignItems:'center',gap:10}}>
-                <span style={{fontSize:13,color:C.success,fontWeight:700,display:'flex',alignItems:'center',gap:5}}><Icon name="check" size={14} color={C.success}/>Marcado</span>
-                <button onClick={()=>cancelar(em.id)} style={{padding:'6px 14px',background:C.dangerBg,border:`1px solid ${C.danger}33`,borderRadius:8,color:C.danger,fontSize:13,height:36}}>Cancelar</button>
-              </div>:<span style={{fontSize:12,color:C.textMuted}}>Seleciona um prato</span>}
+              {readonly
+                ? marc
+                  ? <span style={{fontSize:13,color:C.success,fontWeight:700,display:'flex',alignItems:'center',gap:5}}><Icon name="check" size={14} color={C.success}/>Marcado</span>
+                  : <span style={{fontSize:12,color:C.textMuted,fontStyle:'italic'}}>Sem marcação · marcações encerradas</span>
+                : marc
+                  ? <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <span style={{fontSize:13,color:C.success,fontWeight:700,display:'flex',alignItems:'center',gap:5}}><Icon name="check" size={14} color={C.success}/>Marcado</span>
+                      <button onClick={()=>cancelar(em.id)} style={{padding:'6px 14px',background:C.dangerBg,border:`1px solid ${C.danger}33`,borderRadius:8,color:C.danger,fontSize:13,height:36}}>Cancelar</button>
+                    </div>
+                  : <span style={{fontSize:12,color:C.textMuted}}>Seleciona um prato</span>}
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:8}}>
-              {pratos.map(({n,label,desc})=><PratoBtn key={n} label={label} desc={desc} selected={marc?.prato_num===n} onClick={()=>marcar(em,n)}/>)}
+              {pratos.map(({n,label,desc})=><PratoBtn key={n} label={label} desc={desc} selected={marc?.prato_num===n} onClick={readonly?undefined:()=>marcar(em,n)} disabled={readonly}/>)}
             </div>
           </div>
         })}
