@@ -459,6 +459,9 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
   }, [])
 
   const meal = mealNow(s)
+  const next = nextMeal(s)
+  const mealRef = useRef(meal)
+  useEffect(() => { mealRef.current = meal }, [meal])
 
   const rfidRef=useRef(''); const rfidTimer=useRef(null)
 
@@ -490,10 +493,11 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
 
   const process=async(val,isRfid=false)=>{
     const v=val.replace(/[^\x21-\x7E]/g,'').trim(); if(!v) return
+    if(!mealRef.current) return  // cantina encerrada — bloqueia consumos
     setNumInput('')
     const func=isRfid?funcionarios.find(f=>f.rfid===v):funcionarios.find(f=>f.numero===v||f.numero===v.padStart(3,'0'))
     if(!func){setStatus({type:'error',msg:'Funcionário não encontrado'});setTimeout(reset,3000);return}
-    const ementa=ementas.find(e=>e.data===TODAY&&e.tipo===meal)
+    const ementa=ementas.find(e=>e.data===TODAY&&e.tipo===mealRef.current)
     if(!ementa){setStatus({type:'error',msg:'Sem ementa para este momento'});setTimeout(reset,3000);return}
     const{data:exC}=await supabase.from('cantina_consumos').select('prato_num').eq('funcionario_id',func.id).eq('ementa_id',ementa.id).maybeSingle()
     if(exC){const pk=`prato${exC.prato_num}`;setStatus({type:'dup',func,pratoLabel:ementa[pk+'_label'],pratoDesc:ementa[pk+'_desc']});setTimeout(reset,6000);return}
