@@ -47,7 +47,7 @@ const toMin = (t) => { const [h,m]=(t||'00:00').split(':').map(Number); return h
 const DEFAULT_SETTINGS = {
   almoco_inicio: '12:00', almoco_fim: '14:30',
   jantar_inicio: '19:00', jantar_fim: '21:30',
-  marcacao_antecedencia_dias: '0',
+  bloquear_dia_proprio: 'false',
   servir_fds: 'true',
 }
 
@@ -354,8 +354,8 @@ function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
   </InputScreen>
 
   // ── Dashboard ────────────────────────────────────────────────────────────
-  const antec    = parseInt(s.marcacao_antecedencia_dias)||0
-  const minDay   = addD(TODAY,antec)
+  const antec    = s.bloquear_dia_proprio === 'true' ? 1 : 0
+  const minDay   = addD(TODAY, antec)
   const serveFds = s.servir_fds!=='false'
   const days = [...new Set(ementas.map(e=>e.data))].sort().filter(d=>{
     if(d<minDay) return false
@@ -999,15 +999,18 @@ function SecDefinicoes({settings,reload}) {
 
     <Card title="📅 Regras de marcação">
       <div style={{marginBottom:14}}>
-        <label style={lS}>Antecedência mínima (dias)</label>
-        <div style={{display:'flex',alignItems:'center',gap:12}}>
-          <input type="number" min="0" max="30" value={form.marcacao_antecedencia_dias} onChange={e=>set('marcacao_antecedencia_dias',e.target.value)} style={{...iS,width:100}}/>
-          <span style={{fontSize:13,color:C.textSub}}>
-            {form.marcacao_antecedencia_dias==='0'?'Funcionários podem marcar para o próprio dia'
-            :form.marcacao_antecedencia_dias==='1'?'Têm de marcar com pelo menos 1 dia de antecedência'
-            :`Têm de marcar com pelo menos ${form.marcacao_antecedencia_dias} dias de antecedência`}
-          </span>
-        </div>
+        <label style={{display:'flex',alignItems:'flex-start',gap:12,cursor:'pointer'}}>
+          <input type="checkbox" checked={form.bloquear_dia_proprio==='true'} onChange={e=>set('bloquear_dia_proprio',e.target.checked?'true':'false')}
+            style={{width:18,height:18,marginTop:2,flexShrink:0}}/>
+          <div>
+            <div style={{fontSize:14,color:C.text,fontWeight:500}}>Bloquear marcações para o próprio dia</div>
+            <div style={{fontSize:12,color:C.textMuted,marginTop:3,lineHeight:1.5}}>
+              {form.bloquear_dia_proprio==='true'
+                ? 'Ativo — os funcionários têm de marcar com pelo menos 1 dia de antecedência.'
+                : 'Inativo — os funcionários podem marcar para o próprio dia.'}
+            </div>
+          </div>
+        </label>
       </div>
       <div>
         <label style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer'}}>
