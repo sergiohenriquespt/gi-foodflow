@@ -459,12 +459,32 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
   const [recentes,   setRecentes]   = useState([])
   const [manualMode, setManualMode] = useState(false)
   const [tick,       setTick]       = useState(0)   // força re-render a cada 30s
+  const [contagens,  setContagens]  = useState([])
 
   // Relógio: reavalia getMeal() periodicamente
   useEffect(() => {
     const id = setInterval(() => setTick(t=>t+1), 30000)
     return () => clearInterval(id)
   }, [])
+
+  const loadContagens = useCallback(async () => {
+    const currentMeal = getMeal({...DEFAULTS,...settings})
+    if (!currentMeal) { setContagens([]); return }
+    const ementa = ementas.find(e => e.data === TODAY && e.tipo === currentMeal)
+    if (!ementa) { setContagens([]); return }
+    const [{data:marcs},{data:cons}] = await Promise.all([
+      supabase.from('cantina_marcacoes').select('prato_num').eq('ementa_id',ementa.id),
+      supabase.from('cantina_consumos').select('prato_num').eq('ementa_id',ementa.id),
+    ])
+    const pratos = [1,2,3,4].map(n=>({n,label:ementa[`prato${n}_label`]})).filter(p=>p.label)
+    setContagens(pratos.map(({n,label})=>({
+      label,
+      total:(marcs||[]).filter(m=>m.prato_num===n).length,
+      consumido:(cons||[]).filter(c=>c.prato_num===n).length,
+    })).filter(p=>p.total>0))
+  }, [ementas, settings])
+
+  useEffect(() => { loadContagens() }, [loadContagens, tick])
 
   const meal = getMeal(s)   // null quando fora do horário
 
@@ -482,6 +502,7 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
     const pk=`prato${pratoNum}`,pratoLabel=ementa[pk+'_label'],pratoDesc=ementa[pk+'_desc']
     setRecentes(p=>[{id:data.id,validado_em:data.validado_em,nome:func.nome,foto:func.foto,pratoLabel,pratoDesc},...p].slice(0,5))
     setStatus({type:'ok',func,pratoLabel,pratoDesc})
+    loadContagens()
     setTimeout(reset,5000)
   }
 
@@ -657,6 +678,24 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
           <div style={{width:'100%',maxWidth:460}}>{renderMain()}</div>
         </div>
         <div style={{width:280,background:C.surface,borderLeft:`1px solid ${C.border}`,display:'flex',flexDirection:'column',overflowY:'auto',flexShrink:0}}>
+          {meal && contagens.length > 0 && (
+            <div style={{padding:'14px 16px',borderBottom:`1px solid ${C.border}`,background:C.surface3}}>
+              <div style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:1,marginBottom:10}}>Faltam servir</div>
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {contagens.map(({label,total,consumido}) => {
+                  const falta = total - consumido, p = ps(label)
+                  return (
+                    <div key={label} style={{display:'flex',alignItems:'center',gap:8,background:p.bg,border:`1px solid ${p.border}`,borderRadius:8,padding:'8px 12px'}}>
+                      <PratoTag label={label}/>
+                      <div style={{flex:1}}/>
+                      <span style={{fontSize:28,fontWeight:900,color:falta===0?C.textMuted:p.color,lineHeight:1}}>{falta}</span>
+                      <span style={{fontSize:11,color:C.textMuted,alignSelf:'flex-end',marginBottom:2}}>/{total}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
           <div style={{padding:'16px 18px 12px',fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:1,borderBottom:`1px solid ${C.border}`}}>Últimas validações</div>
           {recentes.length===0
             ? <div style={{padding:32,textAlign:'center',color:C.textMuted,fontSize:13}}>Sem validações</div>
