@@ -307,19 +307,41 @@ function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
 
   const {serialStatus,serialErrMsg,connect:connectSerial} = useSerial(onUidRef)
 
-  // HID fallback
+  // HID fallback + teclado físico
   const rfidRef = useRef(''); const rfidTimer = useRef(null)
+  const stepRef = useRef(step)
+  const submitNumeroRef = useRef(null); const submitPinRef = useRef(null)
+  useEffect(() => { stepRef.current = step },                 [step])
+  useEffect(() => { submitNumeroRef.current = submitNumero }, [submitNumero])
+  useEffect(() => { submitPinRef.current    = submitPin    }, [submitPin])
   useEffect(() => {
     if (step==='dashboard') return
     const h = e => {
-      if(e.key==='Enter'){if(rfidRef.current){onUidRef.current(rfidRef.current.replace(/[^\x21-\x7E]/g,'').trim());rfidRef.current=''}return}
-      if(e.key.length!==1) return
-      rfidRef.current+=e.key; clearTimeout(rfidTimer.current)
-      rfidTimer.current=setTimeout(()=>{rfidRef.current=''},200)
+      if (e.key === 'Backspace') {
+        rfidRef.current = ''; clearTimeout(rfidTimer.current)
+        if (stepRef.current==='numero') setNumInput(v=>v.slice(0,-1))
+        else if (stepRef.current==='pin') setPinInput(v=>v.slice(0,-1))
+        return
+      }
+      if (e.key === 'Enter') {
+        const uid = rfidRef.current.replace(/[^\x21-\x7E]/g,'').trim()
+        rfidRef.current = ''; clearTimeout(rfidTimer.current)
+        if (uid.length >= 6) { onUidRef.current(uid); setNumInput(''); return }
+        if (stepRef.current==='numero') submitNumeroRef.current?.()
+        else if (stepRef.current==='pin') submitPinRef.current?.()
+        return
+      }
+      if (e.key.length !== 1) return
+      rfidRef.current += e.key; clearTimeout(rfidTimer.current)
+      rfidTimer.current = setTimeout(() => { rfidRef.current = '' }, 200)
+      if (/^\d$/.test(e.key)) {
+        if (stepRef.current==='numero') setNumInput(v => v.length < 10 ? v + e.key : v)
+        else if (stepRef.current==='pin') setPinInput(v => v.length < 10 ? v + e.key : v)
+      }
     }
-    window.addEventListener('keydown',h)
-    return()=>{window.removeEventListener('keydown',h);clearTimeout(rfidTimer.current)}
-  },[step])
+    window.addEventListener('keydown', h)
+    return () => { window.removeEventListener('keydown', h); clearTimeout(rfidTimer.current) }
+  }, [step])
 
   const loadMarcacoes = async fid => { const{data}=await supabase.from('cantina_marcacoes').select('*').eq('funcionario_id',fid); setMarcacoes(data||[]) }
 
@@ -528,15 +550,33 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
   // Mantém processRef sempre atualizado
   useEffect(() => { processRef.current = process }, [process])
 
-  // HID fallback
+  // HID fallback + teclado físico
   const rfidRef=useRef(''); const rfidTimer=useRef(null)
+  const manualModeRef = useRef(manualMode); const numInputRef = useRef(numInput)
+  useEffect(() => { manualModeRef.current = manualMode }, [manualMode])
+  useEffect(() => { numInputRef.current   = numInput   }, [numInput])
   useEffect(() => {
     if(status?.type==='no-marc') return
     const h = e => {
-      if(e.key==='Enter'){if(rfidRef.current){process(rfidRef.current,true);rfidRef.current=''}return}
-      if(e.key.length!==1) return
-      rfidRef.current+=e.key; clearTimeout(rfidTimer.current)
-      rfidTimer.current=setTimeout(()=>{rfidRef.current=''},200)
+      if (e.key === 'Backspace') {
+        rfidRef.current = ''; clearTimeout(rfidTimer.current)
+        if (manualModeRef.current) setNumInput(v => v.slice(0,-1))
+        return
+      }
+      if (e.key === 'Enter') {
+        const uid = rfidRef.current.replace(/[^\x21-\x7E]/g,'').trim()
+        rfidRef.current = ''; clearTimeout(rfidTimer.current)
+        if (uid.length >= 6) { process(uid, true); return }
+        if (manualModeRef.current && numInputRef.current) process(numInputRef.current, false)
+        return
+      }
+      if (e.key.length !== 1) return
+      rfidRef.current += e.key; clearTimeout(rfidTimer.current)
+      rfidTimer.current = setTimeout(() => { rfidRef.current = '' }, 200)
+      if (/^\d$/.test(e.key)) {
+        if (manualModeRef.current) { setNumInput(v => v.length < 10 ? v + e.key : v) }
+        else { setManualMode(true); setNumInput(e.key) }
+      }
     }
     window.addEventListener('keydown',h)
     return()=>{window.removeEventListener('keydown',h);clearTimeout(rfidTimer.current)}
