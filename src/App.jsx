@@ -311,9 +311,7 @@ function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
   const rfidRef = useRef(''); const rfidTimer = useRef(null)
   const stepRef = useRef(step)
   const submitNumeroRef = useRef(null); const submitPinRef = useRef(null)
-  useEffect(() => { stepRef.current = step },                 [step])
-  useEffect(() => { submitNumeroRef.current = submitNumero }, [submitNumero])
-  useEffect(() => { submitPinRef.current    = submitPin    }, [submitPin])
+  useEffect(() => { stepRef.current = step }, [step])
   useEffect(() => {
     if (step==='dashboard') return
     const h = e => {
@@ -362,6 +360,9 @@ function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
     if(pinInput===func.pin){setStep('dashboard');setPinInput('');setErr('')}
     else{setErr('PIN incorreto');setPinInput('');setTimeout(()=>setErr(''),3000)}
   }
+
+  submitNumeroRef.current = submitNumero
+  submitPinRef.current    = submitPin
 
   const logout = () => {setStep('numero');setFunc(null);setNumInput('');setPinInput('');setErr('');setSelDay(TODAY);setMarcacoes([])}
 
