@@ -1042,7 +1042,7 @@ function SecConsumos({consumos,funcionarios,ementas}) {
 // ── Marcações (relatório) ─────────────────────────────────────────────────────
 function SecMarcacoes({marcacoes,funcionarios,ementas}) {
   const [fStart,setFStart]=useState(FIRST_MONTH())
-  const [fEnd,  setFEnd]  =useState(TODAY)
+  const [fEnd,  setFEnd]  =useState(addD(TODAY,14))
   const [fMeal, setFMeal] =useState('')
   const [view,  setView]  =useState('funcionario') // 'funcionario'|'refeicao'
   const enriched=marcacoes.map(m=>{
