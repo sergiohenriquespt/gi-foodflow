@@ -711,7 +711,7 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
               ? <span style={{fontSize:11,color:C.warn,background:C.warnBg,border:`1px solid ${C.warn}33`,borderRadius:6,padding:'3px 10px'}}>A ligar…</span>
               : <button onClick={connectSerial} style={{fontSize:12,fontWeight:600,color:C.yellow,background:C.yellow+'18',border:`1px solid ${C.yellow}55`,borderRadius:8,padding:'5px 14px',height:34}}>{serialStatus==='error'?'⚠ Religar':'Conectar leitor'}</button>
           )}
-          <button onClick={onBack} style={{background:'none',border:'none',color:C.textMuted,fontSize:13}}>← Sair</button>
+          {onBack && <button onClick={onBack} style={{background:'none',border:'none',color:C.textMuted,fontSize:13}}>← Sair</button>}
         </div>
       </div>
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
@@ -1178,6 +1178,7 @@ function SecDefinicoes({settings,reload}) {
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [mode,         setMode]         = useState(getInitialMode)
+  const kiosk = (() => { try { return new URLSearchParams(window.location.search).get('kiosk')==='true' } catch(_) { return false } })()
   const [loading,      setLoading]      = useState(true)
   const [loadErr,      setLoadErr]      = useState(null)
   const [funcionarios, setFuncionarios] = useState([])
@@ -1217,7 +1218,7 @@ export default function App() {
   const shared = {funcionarios,ementas,settings}
 
   if (mode==='selector')   return <ModeSelector onSelect={setMode}/>
-  if (mode==='marcacoes')  return <><ErrBar/><TerminalMarcacoes  {...shared} onBack={()=>setMode('selector')}/></>
-  if (mode==='validacoes') return <><ErrBar/><TerminalValidacoes {...shared} onBack={()=>setMode('selector')}/></>
+  if (mode==='marcacoes')  return <><ErrBar/><TerminalMarcacoes  {...shared} onBack={kiosk?null:()=>setMode('selector')}/></>
+  if (mode==='validacoes') return <><ErrBar/><TerminalValidacoes {...shared} onBack={kiosk?null:()=>setMode('selector')}/></>
   if (mode==='backoffice') return <><ErrBar/><Backoffice {...shared} marcacoesAll={marcacoesAll} consumos={consumos} reload={reload} onBack={()=>setMode('selector')}/></>
 }
