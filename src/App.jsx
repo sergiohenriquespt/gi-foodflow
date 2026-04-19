@@ -271,8 +271,9 @@ function ModeSelector({onSelect}) {
           <div style={{fontSize:12,color:C.textSub,marginTop:3}}>{m.desc}</div>
         </button>
       ))}
-      <div style={{marginTop:20,fontSize:11,color:C.textMuted,textAlign:'center',lineHeight:1.7}}>
-        URL por computador: <code style={{color:C.yellow+'aa',background:C.surface2,padding:'1px 5px',borderRadius:3}}>?mode=marcacoes</code>
+      <div style={{marginTop:20,fontSize:11,color:C.textMuted,textAlign:'center',lineHeight:2}}>
+        <div>Acesso por PC: <code style={{color:C.yellow+'aa',background:C.surface2,padding:'1px 5px',borderRadius:3}}>?mode=marcacoes</code></div>
+        <div>Modo quiosque (sem saída): adicionar <code style={{color:C.yellow+'aa',background:C.surface2,padding:'1px 5px',borderRadius:3}}>&amp;kiosk=true</code> à URL</div>
       </div>
     </div>
   )
