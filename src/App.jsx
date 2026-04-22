@@ -705,13 +705,14 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
           <span style={{fontSize:13,color:meal?C.textMuted:C.danger}}>
             {meal==='A'?'🌞 Almoço':meal==='J'?'🌙 Jantar':'⛔ Encerrada'} · {new Date().toLocaleDateString('pt-PT')}
           </span>
-          {navigator.serial && (
-            serialStatus==='connected'
-              ? <span style={{fontSize:11,color:C.success,background:C.successBg,border:`1px solid ${C.success}33`,borderRadius:6,padding:'3px 10px',fontWeight:600,display:'flex',alignItems:'center',gap:5}}><span style={{width:6,height:6,borderRadius:'50%',background:C.success,display:'inline-block'}}/>Leitor ligado</span>
-              : serialStatus==='connecting'
-              ? <span style={{fontSize:11,color:C.warn,background:C.warnBg,border:`1px solid ${C.warn}33`,borderRadius:6,padding:'3px 10px'}}>A ligar…</span>
-              : <button onClick={connectSerial} style={{fontSize:12,fontWeight:600,color:C.yellow,background:C.yellow+'18',border:`1px solid ${C.yellow}55`,borderRadius:8,padding:'5px 14px',height:34}}>{serialStatus==='error'?'⚠ Religar':'Conectar leitor'}</button>
-          )}
+          {!navigator.serial
+            ? <span style={{fontSize:11,color:C.warn}}>RFID: requer Chrome ou Edge</span>
+            : serialStatus==='connected'
+            ? <span style={{fontSize:11,color:C.success,background:C.successBg,border:`1px solid ${C.success}33`,borderRadius:6,padding:'3px 10px',fontWeight:600,display:'flex',alignItems:'center',gap:5}}><span style={{width:6,height:6,borderRadius:'50%',background:C.success,display:'inline-block'}}/>Leitor ligado</span>
+            : serialStatus==='connecting'
+            ? <span style={{fontSize:11,color:C.warn,background:C.warnBg,border:`1px solid ${C.warn}33`,borderRadius:6,padding:'3px 10px'}}>A ligar…</span>
+            : <button onClick={connectSerial} style={{fontSize:12,fontWeight:600,color:C.yellow,background:C.yellow+'18',border:`1px solid ${C.yellow}55`,borderRadius:8,padding:'5px 14px',height:34}}>{serialStatus==='error'?'⚠ Religar':'Conectar leitor'}</button>
+          }
           {onBack && <button onClick={onBack} style={{background:'none',border:'none',color:C.textMuted,fontSize:13}}>← Sair</button>}
         </div>
       </div>
