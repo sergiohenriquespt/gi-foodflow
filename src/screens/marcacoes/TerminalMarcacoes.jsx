@@ -2,11 +2,11 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { C } from '../../constants/colors'
 import { DEFAULTS } from '../../constants/settings'
-import { WD, MN, fmtF, TODAY } from '../../utils/date'
+import { WD, MN, TODAY } from '../../utils/date'
 import Avatar from '../../components/Avatar'
 import Icon from '../../components/Icon'
 import Logo from '../../components/Logo'
-import PratoBtn from '../../components/PratoBtn'
+import PratoCard from '../../components/PratoCard'
 import useSerial from '../../hooks/useSerial'
 
 const ARR = { bg:'#151920', card:'#1a2028', surf:'#29333d', border:'#3a4550', ink:'#e8ecef', ink2:'#a4adb6', ink3:'#6c7680', accent:'#e0cb4b', accentText:'#1a2028' }
@@ -73,6 +73,60 @@ function LoginShell({leftPanel, value, secret=false, onChange, onConfirm, onBack
   )
 }
 
+function DayChip({d, sel, marcCount, isToday, onClick}) {
+  const dd = new Date(d+'T12:00:00')
+  return (
+    <button onClick={onClick}
+      style={{cursor:'pointer',textAlign:'left',background:sel?C.yellow:C.surface,color:sel?C.bg:C.text,border:`1.5px solid ${sel?C.yellow:C.border}`,borderRadius:14,padding:'14px 18px',display:'flex',flexDirection:'column',alignItems:'flex-start',gap:6,minWidth:132,flexShrink:0,position:'relative',transition:'border-color 0.15s, background 0.15s'}}>
+      <div style={{display:'flex',alignItems:'baseline',gap:6}}>
+        <span style={{fontSize:40,lineHeight:0.85,fontWeight:400}}>{dd.getDate()}</span>
+        <span style={{fontSize:12,fontWeight:700,letterSpacing:'0.12em',color:sel?'rgba(26,32,40,0.6)':C.textMuted}}>{WD[dd.getDay()].toUpperCase()}</span>
+      </div>
+      <div style={{display:'flex',alignItems:'center',gap:5,fontSize:12,color:sel?'rgba(26,32,40,0.7)':C.textSub}}>
+        {marcCount>0
+          ? <><span style={{width:7,height:7,borderRadius:'50%',background:sel?C.bg:C.success}}/>{marcCount} marcado{marcCount>1?'s':''}</>
+          : <span style={{fontStyle:'italic'}}>—</span>}
+      </div>
+      {isToday && (
+        <span style={{position:'absolute',top:-8,right:10,fontSize:9,fontWeight:800,letterSpacing:'0.16em',background:sel?C.bg:C.yellow,color:sel?C.yellow:C.bg,padding:'3px 8px',borderRadius:4}}>HOJE</span>
+      )}
+    </button>
+  )
+}
+
+function MealBlock({tipo, hour, marc, pratos, readonly, onMarcar, onCancelar}) {
+  const emoji = tipo==='A' ? '🌞' : '🌙'
+  const label = tipo==='A' ? 'Almoço' : 'Jantar'
+  return (
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:22,padding:'22px 24px',flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
+      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:14}}>
+        <div style={{display:'flex',alignItems:'baseline',gap:12}}>
+          <span style={{fontSize:30}}>{emoji}</span>
+          <span style={{fontStyle:'italic',fontSize:36,color:C.text,lineHeight:1}}>{label}</span>
+          <span style={{fontSize:13,color:C.textMuted,marginLeft:4}}>· {hour}</span>
+        </div>
+        {readonly
+          ? marc
+            ? <span style={{fontSize:13,color:C.success,fontWeight:700,display:'flex',alignItems:'center',gap:6}}><Icon name="check" size={14} color={C.success}/> Marcado</span>
+            : <span style={{fontSize:13,color:C.textMuted,fontStyle:'italic'}}>Marcações encerradas</span>
+          : marc
+            ? <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <span style={{display:'inline-flex',alignItems:'center',gap:7,background:C.successBg,border:`1px solid ${C.success}33`,borderRadius:99,padding:'6px 14px',fontSize:13,fontWeight:700,color:C.success}}>
+                  <Icon name="check" size={14} color={C.success}/> Marcado
+                </span>
+                <button onClick={onCancelar} style={{fontSize:13,fontWeight:600,color:C.textSub,background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,padding:'6px 14px',cursor:'pointer'}}>Trocar prato</button>
+              </div>
+            : <span style={{fontSize:13,color:C.textMuted,fontStyle:'italic'}}>Escolhe um prato</span>}
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,flex:1,alignContent:'stretch',opacity:readonly&&!marc?0.5:1}}>
+        {pratos.map(({n,label:pratoLabel,desc}) => (
+          <PratoCard key={n} label={pratoLabel} desc={desc} selected={marc?.prato_num===n} disabled={readonly} onClick={readonly?undefined:()=>onMarcar(n)}/>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
   const s = {...DEFAULTS,...settings}
   const [step,      setStep]      = useState('numero')
@@ -81,6 +135,7 @@ export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}
   const [func,      setFunc]      = useState(null)
   const [err,       setErr]       = useState('')
   const [selDay,    setSelDay]    = useState(TODAY)
+  const [weekOffset,setWeekOffset]= useState(0)
   const [marcacoes, setMarcacoes] = useState([])
   const [rfidMsg,   setRfidMsg]   = useState('')
 
@@ -135,7 +190,7 @@ export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}
     else{setErr('PIN incorreto');setPinInput('');setTimeout(()=>setErr(''),3000)}
   }
 
-  const logout = () => {setStep('numero');setFunc(null);setNumInput('');setPinInput('');setErr('');setSelDay(TODAY);setMarcacoes([])}
+  const logout = () => {setStep('numero');setFunc(null);setNumInput('');setPinInput('');setErr('');setSelDay(TODAY);setWeekOffset(0);setMarcacoes([])}
 
   if (step==='numero') {
     const leftPanel = (
@@ -194,73 +249,91 @@ export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}
   const marcar = async (em,n) => { await supabase.from('cantina_marcacoes').upsert({funcionario_id:func.id,ementa_id:em.id,prato_num:n},{onConflict:'funcionario_id,ementa_id'}); await loadMarcacoes(func.id) }
   const cancelar = async eid => { await supabase.from('cantina_marcacoes').delete().eq('funcionario_id',func.id).eq('ementa_id',eid); await loadMarcacoes(func.id) }
 
+  const weekDays = days.slice(weekOffset*5, weekOffset*5+5)
+  const hasPrev  = weekOffset > 0
+  const hasNext  = days.length > (weekOffset+1)*5
+  const goWeek = off => {
+    const wd = days.slice(off*5, off*5+5)
+    setWeekOffset(off)
+    if (wd.length && !wd.includes(selDay)) setSelDay(wd[0])
+  }
+  const weekEm     = ementas.filter(e=>weekDays.includes(e.data))
+  const nMarcadas  = weekEm.filter(e=>getM(e.id)).length
+  const nPorMarcar = weekEm.length - nMarcadas
+  const weekLabel = (() => {
+    if(!weekDays.length) return 'Sem dias disponíveis'
+    const a=new Date(weekDays[0]+'T12:00:00'), b=new Date(weekDays[weekDays.length-1]+'T12:00:00')
+    return a.getMonth()===b.getMonth()
+      ? `Semana de ${a.getDate()} a ${b.getDate()} de ${MN[b.getMonth()]}`
+      : `Semana de ${a.getDate()} ${MN[a.getMonth()]} a ${b.getDate()} ${MN[b.getMonth()]}`
+  })()
+  const weekBtn = {height:32,padding:'0 14px',cursor:'pointer',background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,fontSize:12,fontWeight:600,color:C.textSub,display:'inline-flex',alignItems:'center',gap:6}
+
   return (
-    <div style={{height:'100vh',background:C.bg,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 20px',height:58,display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
-        <Logo size="sm" showSub={false}/>
+    <div style={{height:'100vh',background:C.bg,color:C.text,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+      {/* Topbar */}
+      <div style={{padding:'18px 28px 0',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:22}}>
+          <Logo size="sm" showSub={false}/>
+          <div style={{width:1,height:28,background:C.border}}/>
+          <div>
+            <div style={{fontStyle:'italic',fontSize:26,lineHeight:1,color:C.text}}>Olá, {func.nome.split(' ')[0]}</div>
+            <div style={{fontSize:12,color:C.textMuted,marginTop:4}}>O que vais comer hoje?</div>
+          </div>
+        </div>
         <div style={{display:'flex',alignItems:'center',gap:14}}>
-          <Avatar nome={func.nome} foto={func.foto} size={36}/>
-          <div><div style={{fontSize:16,fontWeight:600,color:C.text}}>{func.nome}</div><div style={{fontSize:11,color:C.textMuted}}>Nº {func.numero}</div></div>
-          <button onClick={logout} style={{marginLeft:8,padding:'8px 18px',background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,color:C.textSub,fontSize:14,height:40}}>Sair</button>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:13,fontWeight:700,color:C.text}}>{func.nome}</div>
+            <div style={{fontSize:11,color:C.textMuted}}>Nº {func.numero}</div>
+          </div>
+          <Avatar nome={func.nome} foto={func.foto} size={42}/>
+          <button onClick={logout} style={{height:42,padding:'0 16px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:99,color:C.textSub,fontSize:13,fontWeight:600,display:'inline-flex',alignItems:'center',gap:8,cursor:'pointer'}}>
+            <Icon name="logout" size={15}/> Sair
+          </button>
         </div>
       </div>
-      <div style={{display:'flex',flex:1,overflow:'hidden'}}>
-        <div style={{width:200,background:C.surface,borderRight:`1px solid ${C.border}`,overflowY:'auto',flexShrink:0}}>
-          <div style={{padding:'12px 16px 8px',fontSize:10,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:1}}>Dias disponíveis</div>
-          {days.map(d => {
-            const dd=new Date(d+'T12:00:00'),isT=d===TODAY,sel=selDay===d
-            const mc=ementas.filter(e=>e.data===d&&getM(e.id)).length
-            const soLeitura=isT&&bloqueado
-            return (
-              <button key={d} onClick={()=>setSelDay(d)}
-                style={{width:'100%',height:80,padding:'0 16px',textAlign:'left',background:sel?C.yellow+'14':'transparent',border:'none',borderLeft:sel?`4px solid ${C.yellow}`:'4px solid transparent',display:'flex',flexDirection:'column',justifyContent:'center',gap:2}}>
-                <div style={{fontSize:14,fontWeight:700,color:isT?C.yellow:C.text,display:'flex',alignItems:'center',gap:5}}>
-                  {isT?'HOJE':WD[dd.getDay()]}
-                  {soLeitura&&<span style={{fontSize:9,color:C.textMuted,fontWeight:400,background:C.surface2,padding:'1px 5px',borderRadius:3}}>só leitura</span>}
-                </div>
-                <div style={{fontSize:12,color:C.textSub}}>{dd.getDate()} {MN[dd.getMonth()]}</div>
-                {mc>0?<div style={{fontSize:11,color:C.success,fontWeight:600}}>✓ {mc} marcado{mc>1?'s':''}</div>:<div style={{fontSize:11,color:C.textMuted}}>— sem marcação</div>}
-              </button>
-            )
-          })}
-          {days.length===0&&<div style={{padding:'20px 16px',fontSize:12,color:C.textMuted,textAlign:'center'}}>Sem dias disponíveis</div>}
-        </div>
-        <div style={{flex:1,overflowY:'auto',padding:'16px 20px'}}>
-          <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-            <div style={{fontSize:17,fontWeight:700,color:C.text}}>{fmtF(selDay)}</div>
-            {selDay===TODAY&&<span style={{background:C.yellow+'22',color:C.yellow,border:`1px solid ${C.yellow}44`,fontSize:11,padding:'3px 10px',borderRadius:5,fontWeight:700}}>HOJE</span>}
+
+      {/* Day strip */}
+      <div style={{padding:'20px 28px 10px',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.textMuted,letterSpacing:'0.14em',textTransform:'uppercase'}}>{weekLabel}</div>
+          <div style={{display:'flex',alignItems:'center',gap:14,fontSize:12,color:C.textSub}}>
+            <span style={{display:'inline-flex',alignItems:'center',gap:6}}>
+              <span style={{width:8,height:8,borderRadius:'50%',background:C.success}}/> {nMarcadas} marcada{nMarcadas===1?'':'s'}
+            </span>
+            <span style={{color:C.textMuted}}>·</span>
+            <span>{nPorMarcar} por marcar</span>
+            {hasPrev && <button onClick={()=>goWeek(weekOffset-1)} style={{...weekBtn,marginLeft:6}}>← Semana anterior</button>}
+            {hasNext && <button onClick={()=>goWeek(weekOffset+1)} style={{...weekBtn,marginLeft:hasPrev?0:6}}>Próxima semana →</button>}
           </div>
-          {['A','J'].map(tipo => {
-            const em=dayEm.find(e=>e.tipo===tipo); if(!em) return null
-            const marc=getM(em.id)
-            const readonly=selDay===TODAY&&bloqueado
-            const pratos=[1,2,3,4].map(n=>({n,label:em[`prato${n}_label`],desc:em[`prato${n}_desc`]})).filter(p=>p.label)
-            return (
-              <div key={tipo} style={{background:C.surface,border:`2px solid ${marc?C.yellow+'55':C.border}`,borderRadius:14,padding:'16px 18px',marginBottom:16}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-                  <div style={{display:'flex',alignItems:'center',gap:10}}>
-                    <span style={{fontSize:20}}>{tipo==='A'?'🌞':'🌙'}</span>
-                    <span style={{fontSize:17,fontWeight:700,color:C.text}}>{tipo==='A'?'Almoço':'Jantar'}</span>
-                  </div>
-                  {readonly
-                    ? marc
-                      ? <span style={{fontSize:13,color:C.success,fontWeight:700,display:'flex',alignItems:'center',gap:5}}><Icon name="check" size={14} color={C.success}/>Marcado</span>
-                      : <span style={{fontSize:12,color:C.textMuted,fontStyle:'italic'}}>Marcações encerradas</span>
-                    : marc
-                      ? <div style={{display:'flex',alignItems:'center',gap:10}}>
-                          <span style={{fontSize:13,color:C.success,fontWeight:700,display:'flex',alignItems:'center',gap:5}}><Icon name="check" size={14} color={C.success}/>Marcado</span>
-                          <button onClick={()=>cancelar(em.id)} style={{padding:'6px 14px',background:C.dangerBg,border:`1px solid ${C.danger}33`,borderRadius:8,color:C.danger,fontSize:13,height:36}}>Cancelar</button>
-                        </div>
-                      : <span style={{fontSize:12,color:C.textMuted}}>Seleciona um prato</span>}
-                </div>
-                <div style={{display:'flex',flexDirection:'column',gap:8,opacity:readonly&&!marc?0.5:1}}>
-                  {pratos.map(({n,label,desc}) => <PratoBtn key={n} label={label} desc={desc} selected={marc?.prato_num===n} onClick={readonly?undefined:()=>marcar(em,n)} disabled={readonly}/>)}
-                </div>
-              </div>
-            )
-          })}
-          {dayEm.length===0&&<div style={{textAlign:'center',color:C.textMuted,fontSize:15,marginTop:60}}>Sem ementa disponível para este dia</div>}
         </div>
+        <div style={{display:'flex',gap:12}}>
+          {weekDays.map(d => (
+            <DayChip key={d} d={d} sel={selDay===d} isToday={d===TODAY}
+              marcCount={ementas.filter(e=>e.data===d&&getM(e.id)).length}
+              onClick={()=>setSelDay(d)}/>
+          ))}
+        </div>
+      </div>
+
+      {/* Meal blocks lado a lado */}
+      <div style={{flex:1,display:'flex',gap:16,padding:'14px 28px 24px',minHeight:0}}>
+        {['A','J'].map(tipo => {
+          const em=dayEm.find(e=>e.tipo===tipo); if(!em) return null
+          const marc=getM(em.id)
+          const readonly=selDay===TODAY&&bloqueado
+          const pratos=[1,2,3,4].map(n=>({n,label:em[`prato${n}_label`],desc:em[`prato${n}_desc`]})).filter(p=>p.label)
+          const hour = tipo==='A' ? `${s.almoco_inicio} — ${s.almoco_fim}` : `${s.jantar_inicio} — ${s.jantar_fim}`
+          return (
+            <MealBlock key={tipo} tipo={tipo} hour={hour} marc={marc} pratos={pratos} readonly={readonly}
+              onMarcar={n=>marcar(em,n)} onCancelar={()=>cancelar(em.id)}/>
+          )
+        })}
+        {dayEm.length===0 && (
+          <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',color:C.textMuted,fontSize:15}}>
+            Sem ementa disponível para este dia
+          </div>
+        )}
       </div>
     </div>
   )
