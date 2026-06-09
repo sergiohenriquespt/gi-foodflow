@@ -2,8 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
-  'https://cqgpgryldmzogfygpybl.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNxZ3BncnlsZG16b2dmeWdweWJsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MDMwMjksImV4cCI6MjA4ODI3OTAyOX0.MjkBexUvuAAU7sYcRs3uPaJh52jdMG723aqeDVuoe9w'
+  'https://swczwblrtwcyfklhapzz.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN3Y3p3YmxydHdjeWZrbGhhcHp6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyNjA2ODQsImV4cCI6MjA4ODgzNjY4NH0.9TMDFzKRvisg0_UkxNFvjxmje3prwdwvz-P3H7cLiPY'
 )
 
 // ── Cores ─────────────────────────────────────────────────────────────────────
@@ -271,9 +271,8 @@ function ModeSelector({onSelect}) {
           <div style={{fontSize:12,color:C.textSub,marginTop:3}}>{m.desc}</div>
         </button>
       ))}
-      <div style={{marginTop:20,fontSize:11,color:C.textMuted,textAlign:'center',lineHeight:2}}>
-        <div>Acesso por PC: <code style={{color:C.yellow+'aa',background:C.surface2,padding:'1px 5px',borderRadius:3}}>?mode=marcacoes</code></div>
-        <div>Modo quiosque (sem saída): adicionar <code style={{color:C.yellow+'aa',background:C.surface2,padding:'1px 5px',borderRadius:3}}>&amp;kiosk=true</code> à URL</div>
+      <div style={{marginTop:20,fontSize:11,color:C.textMuted,textAlign:'center',lineHeight:1.7}}>
+        URL por computador: <code style={{color:C.yellow+'aa',background:C.surface2,padding:'1px 5px',borderRadius:3}}>?mode=marcacoes</code>
       </div>
     </div>
   )
@@ -308,39 +307,19 @@ function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
 
   const {serialStatus,serialErrMsg,connect:connectSerial} = useSerial(onUidRef)
 
-  // HID fallback + teclado físico
+  // HID fallback
   const rfidRef = useRef(''); const rfidTimer = useRef(null)
-  const stepRef = useRef(step)
-  const submitNumeroRef = useRef(null); const submitPinRef = useRef(null)
-  useEffect(() => { stepRef.current = step }, [step])
   useEffect(() => {
     if (step==='dashboard') return
     const h = e => {
-      if (e.key === 'Backspace') {
-        rfidRef.current = ''; clearTimeout(rfidTimer.current)
-        if (stepRef.current==='numero') setNumInput(v=>v.slice(0,-1))
-        else if (stepRef.current==='pin') setPinInput(v=>v.slice(0,-1))
-        return
-      }
-      if (e.key === 'Enter') {
-        const uid = rfidRef.current.replace(/[^\x21-\x7E]/g,'').trim()
-        rfidRef.current = ''; clearTimeout(rfidTimer.current)
-        if (uid.length >= 6) { onUidRef.current(uid); setNumInput(''); return }
-        if (stepRef.current==='numero') submitNumeroRef.current?.()
-        else if (stepRef.current==='pin') submitPinRef.current?.()
-        return
-      }
-      if (e.key.length !== 1) return
-      rfidRef.current += e.key; clearTimeout(rfidTimer.current)
-      rfidTimer.current = setTimeout(() => { rfidRef.current = '' }, 200)
-      if (/^\d$/.test(e.key)) {
-        if (stepRef.current==='numero') setNumInput(v => v.length < 10 ? v + e.key : v)
-        else if (stepRef.current==='pin') setPinInput(v => v.length < 10 ? v + e.key : v)
-      }
+      if(e.key==='Enter'){if(rfidRef.current){onUidRef.current(rfidRef.current.replace(/[^\x21-\x7E]/g,'').trim());rfidRef.current=''}return}
+      if(e.key.length!==1) return
+      rfidRef.current+=e.key; clearTimeout(rfidTimer.current)
+      rfidTimer.current=setTimeout(()=>{rfidRef.current=''},200)
     }
-    window.addEventListener('keydown', h)
-    return () => { window.removeEventListener('keydown', h); clearTimeout(rfidTimer.current) }
-  }, [step])
+    window.addEventListener('keydown',h)
+    return()=>{window.removeEventListener('keydown',h);clearTimeout(rfidTimer.current)}
+  },[step])
 
   const loadMarcacoes = async fid => { const{data}=await supabase.from('cantina_marcacoes').select('*').eq('funcionario_id',fid); setMarcacoes(data||[]) }
 
@@ -361,9 +340,6 @@ function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
     if(pinInput===func.pin){setStep('dashboard');setPinInput('');setErr('')}
     else{setErr('PIN incorreto');setPinInput('');setTimeout(()=>setErr(''),3000)}
   }
-
-  submitNumeroRef.current = submitNumero
-  submitPinRef.current    = submitPin
 
   const logout = () => {setStep('numero');setFunc(null);setNumInput('');setPinInput('');setErr('');setSelDay(TODAY);setMarcacoes([])}
 
@@ -483,32 +459,12 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
   const [recentes,   setRecentes]   = useState([])
   const [manualMode, setManualMode] = useState(false)
   const [tick,       setTick]       = useState(0)   // força re-render a cada 30s
-  const [contagens,  setContagens]  = useState([])
 
   // Relógio: reavalia getMeal() periodicamente
   useEffect(() => {
     const id = setInterval(() => setTick(t=>t+1), 30000)
     return () => clearInterval(id)
   }, [])
-
-  const loadContagens = useCallback(async () => {
-    const currentMeal = getMeal({...DEFAULTS,...settings})
-    if (!currentMeal) { setContagens([]); return }
-    const ementa = ementas.find(e => e.data === TODAY && e.tipo === currentMeal)
-    if (!ementa) { setContagens([]); return }
-    const [{data:marcs},{data:cons}] = await Promise.all([
-      supabase.from('cantina_marcacoes').select('prato_num').eq('ementa_id',ementa.id),
-      supabase.from('cantina_consumos').select('prato_num').eq('ementa_id',ementa.id),
-    ])
-    const pratos = [1,2,3,4].map(n=>({n,label:ementa[`prato${n}_label`]})).filter(p=>p.label)
-    setContagens(pratos.map(({n,label})=>({
-      label,
-      total:(marcs||[]).filter(m=>m.prato_num===n).length,
-      consumido:(cons||[]).filter(c=>c.prato_num===n).length,
-    })).filter(p=>p.total>0))
-  }, [ementas, settings])
-
-  useEffect(() => { loadContagens() }, [loadContagens, tick])
 
   const meal = getMeal(s)   // null quando fora do horário
 
@@ -526,7 +482,6 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
     const pk=`prato${pratoNum}`,pratoLabel=ementa[pk+'_label'],pratoDesc=ementa[pk+'_desc']
     setRecentes(p=>[{id:data.id,validado_em:data.validado_em,nome:func.nome,foto:func.foto,pratoLabel,pratoDesc},...p].slice(0,5))
     setStatus({type:'ok',func,pratoLabel,pratoDesc})
-    loadContagens()
     setTimeout(reset,5000)
   }
 
@@ -552,33 +507,15 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
   // Mantém processRef sempre atualizado
   useEffect(() => { processRef.current = process }, [process])
 
-  // HID fallback + teclado físico
+  // HID fallback
   const rfidRef=useRef(''); const rfidTimer=useRef(null)
-  const manualModeRef = useRef(manualMode); const numInputRef = useRef(numInput)
-  useEffect(() => { manualModeRef.current = manualMode }, [manualMode])
-  useEffect(() => { numInputRef.current   = numInput   }, [numInput])
   useEffect(() => {
     if(status?.type==='no-marc') return
     const h = e => {
-      if (e.key === 'Backspace') {
-        rfidRef.current = ''; clearTimeout(rfidTimer.current)
-        if (manualModeRef.current) setNumInput(v => v.slice(0,-1))
-        return
-      }
-      if (e.key === 'Enter') {
-        const uid = rfidRef.current.replace(/[^\x21-\x7E]/g,'').trim()
-        rfidRef.current = ''; clearTimeout(rfidTimer.current)
-        if (uid.length >= 6) { process(uid, true); return }
-        if (manualModeRef.current && numInputRef.current) process(numInputRef.current, false)
-        return
-      }
-      if (e.key.length !== 1) return
-      rfidRef.current += e.key; clearTimeout(rfidTimer.current)
-      rfidTimer.current = setTimeout(() => { rfidRef.current = '' }, 200)
-      if (/^\d$/.test(e.key)) {
-        if (manualModeRef.current) { setNumInput(v => v.length < 10 ? v + e.key : v) }
-        else { setManualMode(true); setNumInput(e.key) }
-      }
+      if(e.key==='Enter'){if(rfidRef.current){process(rfidRef.current,true);rfidRef.current=''}return}
+      if(e.key.length!==1) return
+      rfidRef.current+=e.key; clearTimeout(rfidTimer.current)
+      rfidTimer.current=setTimeout(()=>{rfidRef.current=''},200)
     }
     window.addEventListener('keydown',h)
     return()=>{window.removeEventListener('keydown',h);clearTimeout(rfidTimer.current)}
@@ -705,15 +642,14 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
           <span style={{fontSize:13,color:meal?C.textMuted:C.danger}}>
             {meal==='A'?'🌞 Almoço':meal==='J'?'🌙 Jantar':'⛔ Encerrada'} · {new Date().toLocaleDateString('pt-PT')}
           </span>
-          {!navigator.serial
-            ? <span style={{fontSize:11,color:C.warn}}>RFID: requer Chrome ou Edge</span>
-            : serialStatus==='connected'
-            ? <span style={{fontSize:11,color:C.success,background:C.successBg,border:`1px solid ${C.success}33`,borderRadius:6,padding:'3px 10px',fontWeight:600,display:'flex',alignItems:'center',gap:5}}><span style={{width:6,height:6,borderRadius:'50%',background:C.success,display:'inline-block'}}/>Leitor ligado</span>
-            : serialStatus==='connecting'
-            ? <span style={{fontSize:11,color:C.warn,background:C.warnBg,border:`1px solid ${C.warn}33`,borderRadius:6,padding:'3px 10px'}}>A ligar…</span>
-            : <button onClick={connectSerial} style={{fontSize:12,fontWeight:600,color:C.yellow,background:C.yellow+'18',border:`1px solid ${C.yellow}55`,borderRadius:8,padding:'5px 14px',height:34}}>{serialStatus==='error'?'⚠ Religar':'Conectar leitor'}</button>
-          }
-          {onBack && <button onClick={onBack} style={{background:'none',border:'none',color:C.textMuted,fontSize:13}}>← Sair</button>}
+          {navigator.serial && (
+            serialStatus==='connected'
+              ? <span style={{fontSize:11,color:C.success,background:C.successBg,border:`1px solid ${C.success}33`,borderRadius:6,padding:'3px 10px',fontWeight:600,display:'flex',alignItems:'center',gap:5}}><span style={{width:6,height:6,borderRadius:'50%',background:C.success,display:'inline-block'}}/>Leitor ligado</span>
+              : serialStatus==='connecting'
+              ? <span style={{fontSize:11,color:C.warn,background:C.warnBg,border:`1px solid ${C.warn}33`,borderRadius:6,padding:'3px 10px'}}>A ligar…</span>
+              : <button onClick={connectSerial} style={{fontSize:12,fontWeight:600,color:C.yellow,background:C.yellow+'18',border:`1px solid ${C.yellow}55`,borderRadius:8,padding:'5px 14px',height:34}}>{serialStatus==='error'?'⚠ Religar':'Conectar leitor'}</button>
+          )}
+          <button onClick={onBack} style={{background:'none',border:'none',color:C.textMuted,fontSize:13}}>← Sair</button>
         </div>
       </div>
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
@@ -721,24 +657,6 @@ function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
           <div style={{width:'100%',maxWidth:460}}>{renderMain()}</div>
         </div>
         <div style={{width:280,background:C.surface,borderLeft:`1px solid ${C.border}`,display:'flex',flexDirection:'column',overflowY:'auto',flexShrink:0}}>
-          {meal && contagens.length > 0 && (
-            <div style={{padding:'14px 16px',borderBottom:`1px solid ${C.border}`,background:C.surface3}}>
-              <div style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:1,marginBottom:10}}>Faltam servir</div>
-              <div style={{display:'flex',flexDirection:'column',gap:6}}>
-                {contagens.map(({label,total,consumido}) => {
-                  const falta = total - consumido, p = ps(label)
-                  return (
-                    <div key={label} style={{display:'flex',alignItems:'center',gap:8,background:p.bg,border:`1px solid ${p.border}`,borderRadius:8,padding:'8px 12px'}}>
-                      <PratoTag label={label}/>
-                      <div style={{flex:1}}/>
-                      <span style={{fontSize:28,fontWeight:900,color:falta===0?C.textMuted:p.color,lineHeight:1}}>{falta}</span>
-                      <span style={{fontSize:11,color:C.textMuted,alignSelf:'flex-end',marginBottom:2}}>/{total}</span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
           <div style={{padding:'16px 18px 12px',fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:1,borderBottom:`1px solid ${C.border}`}}>Últimas validações</div>
           {recentes.length===0
             ? <div style={{padding:32,textAlign:'center',color:C.textMuted,fontSize:13}}>Sem validações</div>
@@ -1043,7 +961,7 @@ function SecConsumos({consumos,funcionarios,ementas}) {
 // ── Marcações (relatório) ─────────────────────────────────────────────────────
 function SecMarcacoes({marcacoes,funcionarios,ementas}) {
   const [fStart,setFStart]=useState(FIRST_MONTH())
-  const [fEnd,  setFEnd]  =useState(addD(TODAY,14))
+  const [fEnd,  setFEnd]  =useState(TODAY)
   const [fMeal, setFMeal] =useState('')
   const [view,  setView]  =useState('funcionario') // 'funcionario'|'refeicao'
   const enriched=marcacoes.map(m=>{
@@ -1180,7 +1098,6 @@ function SecDefinicoes({settings,reload}) {
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [mode,         setMode]         = useState(getInitialMode)
-  const kiosk = (() => { try { return new URLSearchParams(window.location.search).get('kiosk')==='true' } catch(_) { return false } })()
   const [loading,      setLoading]      = useState(true)
   const [loadErr,      setLoadErr]      = useState(null)
   const [funcionarios, setFuncionarios] = useState([])
@@ -1220,7 +1137,7 @@ export default function App() {
   const shared = {funcionarios,ementas,settings}
 
   if (mode==='selector')   return <ModeSelector onSelect={setMode}/>
-  if (mode==='marcacoes')  return <><ErrBar/><TerminalMarcacoes  {...shared} onBack={kiosk?null:()=>setMode('selector')}/></>
-  if (mode==='validacoes') return <><ErrBar/><TerminalValidacoes {...shared} onBack={kiosk?null:()=>setMode('selector')}/></>
+  if (mode==='marcacoes')  return <><ErrBar/><TerminalMarcacoes  {...shared} onBack={()=>setMode('selector')}/></>
+  if (mode==='validacoes') return <><ErrBar/><TerminalValidacoes {...shared} onBack={()=>setMode('selector')}/></>
   if (mode==='backoffice') return <><ErrBar/><Backoffice {...shared} marcacoesAll={marcacoesAll} consumos={consumos} reload={reload} onBack={()=>setMode('selector')}/></>
 }
