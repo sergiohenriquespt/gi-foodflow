@@ -2,22 +2,44 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import { C } from '../../constants/colors'
 import { DEFAULTS } from '../../constants/settings'
-import { getMeal, getNextMeal } from '../../utils/meal'
-import { fmtHM, TODAY } from '../../utils/date'
+import { getMeal, getNextMeal, toMin } from '../../utils/meal'
+import { fmtHM, TODAY, WD, MN } from '../../utils/date'
 import { ps } from '../../constants/pratos'
 import Avatar from '../../components/Avatar'
 import Icon from '../../components/Icon'
-import Keypad from '../../components/Keypad'
 import Logo from '../../components/Logo'
-import PratoBtn from '../../components/PratoBtn'
+import LoginShell, { ARR } from '../../components/LoginShell'
 import PratoTag from '../../components/PratoTag'
 import useSerial from '../../hooks/useSerial'
+
+// Cores específicas dos takeovers deste ecrã — não são tokens globais
+const V = {
+  standby:'#0f1217', panel:'#16191f', panelHi:'#1a1f27',
+  ok:'#0d2e22', okCard:'#0a3a2a',
+  dup:'#2d2208', dupCard:'#3a2c0a',
+  no:'#2a1315', noCard:'#371619', noBtn:'#3f1c1f',
+}
+
+function Pessoa({func, ring, avatar=220, font=60, width=360, metaColor}) {
+  return (
+    <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:avatar>200?20:16,flexShrink:0,width}}>
+      <Avatar nome={func.nome} foto={func.foto} size={avatar} ring={ring}/>
+      <div style={{textAlign:'center'}}>
+        {func.nome.split(' ').map((w,i) => (
+          <div key={i} style={{fontSize:font,lineHeight:1,color:'#fff',letterSpacing:'-0.01em'}}>{w}</div>
+        ))}
+        <div style={{fontSize:avatar>200?15:14,color:metaColor,marginTop:avatar>200?10:8,letterSpacing:'0.04em'}}>Nº {func.numero}</div>
+      </div>
+    </div>
+  )
+}
 
 export default function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
   const s = {...DEFAULTS,...settings}
   const [numInput,   setNumInput]   = useState('')
   const [status,     setStatus]     = useState(null)
   const [recentes,   setRecentes]   = useState([])
+  const [contadores, setContadores] = useState([])
   const [manualMode, setManualMode] = useState(false)
   const [tick,       setTick]       = useState(0)   // força re-render a cada 30s
 
@@ -37,11 +59,42 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
 
   const reset = () => { setNumInput(''); setStatus(null); setManualMode(false) }
 
+  const ementaAtual = meal ? ementas.find(e=>e.data===TODAY&&e.tipo===meal) : null
+
+  const loadContadores = async em => {
+    if(!em){ setContadores([]); return }
+    const [{data:marcs},{data:cons}] = await Promise.all([
+      supabase.from('cantina_marcacoes').select('prato_num').eq('ementa_id',em.id),
+      supabase.from('cantina_consumos').select('prato_num').eq('ementa_id',em.id),
+    ])
+    setContadores([1,2,3,4].map(n => {
+      const label = em[`prato${n}_label`]
+      if(!label) return null
+      const total  = (marcs||[]).filter(m=>m.prato_num===n).length
+      const served = (cons ||[]).filter(c=>c.prato_num===n).length
+      return {n,label,total,left:Math.max(0,total-served)}
+    }).filter(Boolean))
+  }
+
+  const loadRecentes = async em => {
+    if(!em) return
+    const {data} = await supabase.from('cantina_consumos').select('*').eq('ementa_id',em.id).order('validado_em',{ascending:false}).limit(5)
+    if(!data) return
+    setRecentes(data.map(c => {
+      const f = funcionarios.find(f=>f.id===c.funcionario_id)
+      const pk = `prato${c.prato_num}`
+      return {id:c.id,validado_em:c.validado_em,nome:f?.nome||'—',foto:f?.foto,pratoLabel:em[pk+'_label'],pratoDesc:em[pk+'_desc']}
+    }))
+  }
+
+  useEffect(() => { loadContadores(ementaAtual); loadRecentes(ementaAtual) }, [ementaAtual?.id])
+
   const confirmarConsumo = async (func,ementa,pratoNum) => {
     const {data,error} = await supabase.from('cantina_consumos').insert({funcionario_id:func.id,ementa_id:ementa.id,prato_num:pratoNum}).select().single()
     if(error) return
     const pk=`prato${pratoNum}`,pratoLabel=ementa[pk+'_label'],pratoDesc=ementa[pk+'_desc']
     setRecentes(p=>[{id:data.id,validado_em:data.validado_em,nome:func.nome,foto:func.foto,pratoLabel,pratoDesc},...p].slice(0,5))
+    loadContadores(ementa)
     setStatus({type:'ok',func,pratoLabel,pratoDesc})
     setTimeout(reset,5000)
   }
@@ -58,8 +111,8 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     if(!func){setStatus({type:'error',msg:'Funcionário não encontrado'});setTimeout(reset,3000);return}
     const ementa = ementas.find(e=>e.data===TODAY&&e.tipo===currentMeal)
     if(!ementa){setStatus({type:'error',msg:'Sem ementa para este momento'});setTimeout(reset,3000);return}
-    const{data:exC}=await supabase.from('cantina_consumos').select('prato_num').eq('funcionario_id',func.id).eq('ementa_id',ementa.id).maybeSingle()
-    if(exC){const pk=`prato${exC.prato_num}`;setStatus({type:'dup',func,pratoLabel:ementa[pk+'_label'],pratoDesc:ementa[pk+'_desc']});setTimeout(reset,6000);return}
+    const{data:exC}=await supabase.from('cantina_consumos').select('prato_num,validado_em').eq('funcionario_id',func.id).eq('ementa_id',ementa.id).maybeSingle()
+    if(exC){const pk=`prato${exC.prato_num}`;setStatus({type:'dup',func,pratoLabel:ementa[pk+'_label'],pratoDesc:ementa[pk+'_desc'],validadoEm:exC.validado_em});setTimeout(reset,6000);return}
     const{data:marc}=await supabase.from('cantina_marcacoes').select('prato_num').eq('funcionario_id',func.id).eq('ementa_id',ementa.id).maybeSingle()
     if(!marc){setStatus({type:'no-marc',func,ementa});return}
     confirmarConsumo(func,ementa,marc.prato_num)
@@ -84,162 +137,279 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
 
   const next = getNextMeal(s)
 
-  const renderMain = () => {
-    // Cantina encerrada
-    if(!meal) return (
-      <div style={{background:C.surface,border:`2px solid ${C.danger}33`,borderRadius:24,padding:'52px 32px 48px',textAlign:'center'}}>
-        <div style={{fontSize:64,marginBottom:16}}>🔒</div>
-        <div style={{fontSize:32,fontWeight:900,color:C.danger,letterSpacing:2,marginBottom:16}}>CANTINA ENCERRADA</div>
-        {next
-          ? <div style={{fontSize:15,color:C.textSub}}>
-              Próxima refeição: <strong style={{color:C.text}}>{next.tipo==='A'?'🌞 Almoço':'🌙 Jantar'}</strong> às <strong style={{color:C.yellow}}>{next.hora}</strong>
+  // ── Modo manual: mesmo invólucro do login dos terminais (Parte 1) ──
+  if (manualMode && !status) {
+    const leftPanel = (
+      <div>
+        <div style={{fontSize:14,fontWeight:700,color:ARR.ink3,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:16}}>Validação manual</div>
+        <div style={{fontSize:132,lineHeight:0.9,color:ARR.ink,letterSpacing:'-0.01em',marginBottom:4}}>Código.</div>
+        <div style={{fontStyle:'italic',fontSize:56,lineHeight:1.05,color:ARR.ink2}}>Introduz o número do funcionário.</div>
+        <div style={{marginTop:32,display:'inline-flex',alignItems:'center',gap:18,background:ARR.card,border:`1px solid ${ARR.border}`,padding:'16px 22px',borderRadius:16}}>
+          <div style={{position:'relative',width:56,height:56}}>
+            {[0,0.5,1].map(d=>(
+              <div key={d} style={{position:'absolute',inset:0,borderRadius:'50%',border:`1.5px solid ${ARR.accent}`,animation:`ff-pulse-ring 2s ease-out ${d}s infinite`}} />
+            ))}
+            <div style={{position:'absolute',inset:0,borderRadius:'50%',background:'rgba(224,203,75,0.20)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Icon name="card-tap" size={28} color={ARR.accent} />
             </div>
-          : <div style={{fontSize:15,color:C.textMuted}}>Reabre amanhã</div>}
+          </div>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:ARR.ink}}>Encosta o cartão</div>
+            <div style={{fontSize:12,color:ARR.ink3,marginTop:2}}>… ou usa o teclado ao lado</div>
+          </div>
+        </div>
       </div>
     )
+    return <LoginShell leftPanel={leftPanel} value={numInput} onChange={setNumInput} onConfirm={()=>process(numInput)} serialStatus={serialStatus}
+      belowKeypad={<button onClick={()=>{setManualMode(false);setNumInput('')}} style={{width:'100%',height:48,marginTop:12,background:'transparent',border:`1px solid ${ARR.border}`,borderRadius:10,fontSize:13,color:ARR.ink3,cursor:'pointer'}}>← Voltar ao leitor</button>} />
+  }
 
-    if(status?.type==='error') return (
-      <div style={{background:C.surface,border:`2px solid ${C.danger}44`,borderRadius:24,padding:'48px 32px',textAlign:'center'}}>
-        <div style={{width:72,height:72,borderRadius:'50%',background:C.dangerBg,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 16px'}}><Icon name="warn" size={36} color={C.danger}/></div>
-        <div style={{fontSize:22,fontWeight:700,color:C.danger}}>{status.msg}</div>
-      </div>
-    )
+  const now = new Date()
+  const timeStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0')
+  const dateStr = `${WD[now.getDay()]} ${String(now.getDate()).padStart(2,'0')} ${MN[now.getMonth()]}`
+  const mealTag = meal ? (meal==='A'?'🌞 Almoço':'🌙 Jantar') : null
 
-    if(status?.type==='ok') {
-      const p=ps(status.pratoLabel)
+  const bg = !meal || !status ? V.standby
+    : status.type==='ok'      ? V.ok
+    : status.type==='dup'     ? V.dup
+    : status.type==='no-marc' ? V.no
+    : C.bg
+  const glow = status?.type==='ok'  ? 'radial-gradient(circle at 70% 30%, rgba(52,211,153,0.32) 0%, transparent 60%)'
+    : status?.type==='dup'          ? 'radial-gradient(circle at 30% 30%, rgba(251,191,36,0.28) 0%, transparent 60%)'
+    : status?.type==='no-marc'      ? 'radial-gradient(circle at 70% 30%, rgba(248,113,113,0.26) 0%, transparent 60%)'
+    : null
+  const isStandby = !status && meal
+
+  const renderTop = () => {
+    if (status) {
+      const tint = status.type==='ok' ? 'rgba(232,249,236,0.6)' : status.type==='dup' ? 'rgba(254,243,199,0.65)' : status.type==='no-marc' ? 'rgba(254,226,226,0.6)' : C.textMuted
       return (
-        <div style={{background:C.surface,border:`2px solid ${C.success}44`,borderRadius:24,padding:'40px 32px',textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:18}}>
-          <Avatar nome={status.func.nome} foto={status.func.foto} size={100}/>
-          <div style={{fontSize:28,fontWeight:800,color:C.text}}>{status.func.nome}</div>
-          <div style={{display:'flex',alignItems:'center',gap:8,background:C.successBg,border:`1px solid ${C.success}44`,borderRadius:12,padding:'12px 24px'}}>
-            <Icon name="check" size={20} color={C.success}/><span style={{fontSize:18,fontWeight:700,color:C.success}}>CONSUMO REGISTADO</span>
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:14,background:p.bg,border:`1px solid ${p.border}`,borderRadius:14,padding:'14px 28px'}}>
-            <PratoTag label={status.pratoLabel} large={true}/><span style={{fontSize:18,color:C.text,fontWeight:500}}>{status.pratoDesc}</span>
-          </div>
+        <div style={{height:46,padding:'0 28px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,position:'relative',zIndex:1,color:tint,fontSize:12}}>
+          <Logo size="sm" showSub={false}/>
+          <span style={{fontSize:13}}>{mealTag ? `${mealTag} · ${timeStr}` : timeStr}</span>
         </div>
       )
     }
-
-    if(status?.type==='dup') {
-      const p=ps(status.pratoLabel)
-      return (
-        <div style={{background:C.surface,border:`2px solid ${C.warn}44`,borderRadius:24,padding:'40px 32px',textAlign:'center',display:'flex',flexDirection:'column',alignItems:'center',gap:18}}>
-          <Avatar nome={status.func.nome} foto={status.func.foto} size={100}/>
-          <div style={{fontSize:28,fontWeight:800,color:C.text}}>{status.func.nome}</div>
-          <div style={{display:'flex',alignItems:'center',gap:8,background:C.warnBg,border:`1px solid ${C.warn}44`,borderRadius:12,padding:'12px 24px'}}>
-            <Icon name="warn" size={20} color={C.warn}/><span style={{fontSize:16,fontWeight:700,color:C.warn}}>JÁ CONSUMIU ESTA REFEIÇÃO</span>
-          </div>
-          <div style={{display:'flex',alignItems:'center',gap:14,background:p.bg,border:`1px solid ${p.border}`,borderRadius:14,padding:'14px 28px'}}>
-            <PratoTag label={status.pratoLabel} large={true}/><span style={{fontSize:18,color:C.text,fontWeight:500}}>{status.pratoDesc}</span>
-          </div>
-        </div>
-      )
-    }
-
-    if(status?.type==='no-marc') return (
-      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:24,padding:'28px 32px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:16,marginBottom:20}}>
-          <Avatar nome={status.func.nome} foto={status.func.foto} size={70}/>
-          <div><div style={{fontSize:22,fontWeight:700,color:C.text}}>{status.func.nome}</div><div style={{fontSize:13,color:C.textSub,marginTop:2}}>Sem marcação prévia</div></div>
-        </div>
-        <div style={{display:'flex',alignItems:'center',gap:8,background:C.warnBg,border:`1px solid ${C.warn}33`,borderRadius:10,padding:'10px 16px',marginBottom:16,fontSize:14,color:C.warn,fontWeight:600}}>
-          <Icon name="warn" size={16} color={C.warn}/> Selecione o prato a servir:
-        </div>
-        <div style={{display:'flex',flexDirection:'column',gap:10}}>
-          {[1,2,3,4].map(n=>{const l=status.ementa[`prato${n}_label`],d=status.ementa[`prato${n}_desc`];if(!l)return null;return<PratoBtn key={n} label={l} desc={d} selected={false} onClick={()=>confirmarConsumo(status.func,status.ementa,n)}/>})}
-        </div>
-        <button onClick={reset} style={{marginTop:12,width:'100%',height:48,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:10,fontSize:14,color:C.textSub}}>Cancelar</button>
-      </div>
-    )
-
-    // Standby — aguarda cartão ou código
-    if(!manualMode) return (
-      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:24,overflow:'hidden'}}>
-        <div style={{padding:'44px 32px 40px',textAlign:'center'}}>
-          <div style={{display:'inline-flex',alignItems:'center',justifyContent:'center',width:100,height:100,borderRadius:'50%',background:C.yellow+'18',border:`2px solid ${C.yellow}44`,marginBottom:22}}>
-            <Icon name="card" size={46} color={C.yellow}/>
-          </div>
-          <div style={{fontSize:22,fontWeight:800,color:C.text,marginBottom:8}}>{meal==='A'?'🌞 Almoço':'🌙 Jantar'}</div>
-          <div style={{fontSize:16,color:C.textSub,marginBottom:6}}>Aproxime o cartão</div>
-          {serialStatus==='connected'
-            ? <div style={{fontSize:13,color:C.success,fontWeight:600}}>Leitor ativo · à espera de cartão</div>
-            : serialStatus==='connecting'
-            ? <div style={{fontSize:13,color:C.warn}}>A ligar ao leitor…</div>
-            : <div style={{fontSize:13,color:C.danger}}>Leitor não ligado — usa o botão no topo</div>}
-        </div>
-        <div style={{borderTop:`1px solid ${C.border}`,padding:'18px 32px'}}>
-          <button onClick={()=>setManualMode(true)}
-            style={{width:'100%',height:56,background:C.surface2,border:`1.5px solid ${C.border2}`,borderRadius:12,fontSize:15,fontWeight:600,color:C.textSub,display:'flex',alignItems:'center',justifyContent:'center',gap:10}}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor=C.yellow+'66';e.currentTarget.style.color=C.text}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border2;e.currentTarget.style.color=C.textSub}}>
-            <Icon name="users" size={18} color={C.textSub}/> Introduzir código manualmente
-          </button>
-        </div>
-      </div>
-    )
-
     return (
-      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:24}}>
-        <div style={{padding:'24px 32px 20px',textAlign:'center',borderBottom:`1px solid ${C.border}`}}>
-          <div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:4}}>Código de funcionário</div>
-          <div style={{background:C.surface3,border:`1.5px solid ${C.border2}`,borderRadius:12,height:60,display:'flex',alignItems:'center',justifyContent:'center',overflow:'hidden',margin:'0 0 0'}}>
-            {numInput?<span style={{fontSize:28,letterSpacing:6,color:C.yellow,fontWeight:700}}>{numInput}</span>:<span style={{color:C.textMuted,fontSize:14}}>Código</span>}
+      <div style={{height:50,padding:'0 28px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,position:'relative',zIndex:1}}>
+        <Logo size="sm" showSub={false}/>
+        <div style={{display:'flex',alignItems:'center',gap:16}}>
+          <span style={{fontSize:13,color:C.textSub}}>{mealTag?`${mealTag} · `:''}{dateStr} · <strong style={{color:C.text}}>{timeStr}</strong></span>
+          {!meal
+            ? <span style={{display:'inline-flex',alignItems:'center',gap:6,color:C.textMuted,fontWeight:700,fontSize:11,letterSpacing:'0.06em'}}>
+                <span style={{width:7,height:7,borderRadius:'50%',background:C.textMuted}}/>LEITOR EM PAUSA
+              </span>
+            : serialStatus==='connected'
+            ? <span style={{display:'inline-flex',alignItems:'center',gap:6,color:C.success,fontWeight:700,fontSize:11,letterSpacing:'0.06em'}}>
+                <span style={{width:7,height:7,borderRadius:'50%',background:C.success,boxShadow:`0 0 6px ${C.success}`}}/>LEITOR LIGADO
+              </span>
+            : serialStatus==='connecting'
+            ? <span style={{fontSize:11,color:C.warn,fontWeight:700,letterSpacing:'0.06em'}}>A LIGAR…</span>
+            : navigator.serial
+            ? <button onClick={connectSerial} style={{fontSize:12,fontWeight:600,color:C.yellow,background:C.yellow+'18',border:`1px solid ${C.yellow}55`,borderRadius:99,padding:'5px 14px',height:30,cursor:'pointer'}}>{serialStatus==='error'?'⚠ Religar':'Conectar leitor'}</button>
+            : null}
+          <button onClick={onBack} style={{background:'none',border:'none',color:C.textMuted,fontSize:13,cursor:'pointer'}}>← Sair</button>
+        </div>
+      </div>
+    )
+  }
+
+  const renderMain = () => {
+    // Serviço encerrado — standby neutro
+    if(!meal) {
+      const cur = now.getHours()*60 + now.getMinutes()
+      const ended = cur > toMin(s.jantar_fim) ? {label:'jantar',hora:s.jantar_fim}
+        : cur > toMin(s.almoco_fim) ? {label:'almoço',hora:s.almoco_fim} : null
+      return (
+        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',zIndex:1}}>
+          <div style={{textAlign:'center'}}>
+            <div style={{width:200,height:200,margin:'0 auto 36px',borderRadius:'50%',background:'rgba(108,118,128,0.10)',border:'2px solid rgba(108,118,128,0.40)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <Icon name="clock" size={104} color={C.textMuted}/>
+            </div>
+            <div style={{fontSize:84,lineHeight:0.95,color:C.text,marginBottom:14,letterSpacing:'-0.01em'}}>Serviço encerrado</div>
+            {ended && (
+              <div style={{fontSize:21,color:C.textSub,lineHeight:1.5,maxWidth:620,margin:'0 auto'}}>
+                O {ended.label} terminou às <strong style={{color:C.text}}>{ended.hora}</strong>.
+              </div>
+            )}
+            <div style={{marginTop:32,display:'inline-flex',alignItems:'center',gap:16,background:C.surface,border:`1px solid ${C.border}`,borderRadius:99,padding:'14px 26px'}}>
+              <span style={{fontSize:24}}>{next?.tipo==='A'?'🌞':'🌙'}</span>
+              <div style={{textAlign:'left'}}>
+                <div style={{fontSize:12,color:C.textMuted,letterSpacing:'0.12em',fontWeight:700,textTransform:'uppercase'}}>Próximo serviço</div>
+                <div style={{fontSize:18,fontWeight:700,color:C.text,marginTop:2,whiteSpace:'nowrap'}}>
+                  {next ? `${next.tipo==='A'?'Almoço':'Jantar'} · abre às ${next.hora}` : 'Reabre amanhã'}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-        <div style={{padding:'20px 32px 24px'}}>
-          <Keypad value={numInput} onChange={setNumInput} onConfirm={()=>process(numInput)} confirmLabel="✓"/>
-          <button onClick={()=>{setManualMode(false);setNumInput('')}} style={{width:'100%',height:48,marginTop:10,background:'transparent',border:`1px solid ${C.border}`,borderRadius:10,fontSize:13,color:C.textMuted}}>← Voltar ao leitor de cartões</button>
+      )
+    }
+
+    // Erro — takeover simples
+    if(status?.type==='error') return (
+      <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',zIndex:1}}>
+        <div style={{textAlign:'center'}}>
+          <div style={{width:100,height:100,borderRadius:'50%',background:C.dangerBg,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 20px'}}>
+            <Icon name="warn" size={48} color={C.danger}/>
+          </div>
+          <div style={{fontSize:30,fontWeight:700,color:C.danger}}>{status.msg}</div>
+        </div>
+      </div>
+    )
+
+    // Sucesso — takeover verde
+    if(status?.type==='ok') return (
+      <div style={{flex:1,display:'flex',alignItems:'center',padding:'20px 56px 36px',gap:48,position:'relative',zIndex:1}}>
+        <Pessoa func={status.func} ring="rgba(52,211,153,0.6)" metaColor="rgba(232,249,236,0.6)"/>
+        <div style={{flex:1,display:'flex',flexDirection:'column',gap:24}}>
+          <div style={{display:'flex',alignItems:'center',gap:22}}>
+            <div style={{width:132,height:132,borderRadius:'50%',background:'#34d399',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 0 0 16px rgba(52,211,153,0.18), 0 24px 64px rgba(0,0,0,0.4)',flexShrink:0}}>
+              <Icon name="check" size={76} color={V.ok}/>
+            </div>
+            <div>
+              <div style={{fontSize:13,color:'rgba(232,249,236,0.65)',letterSpacing:'0.16em',fontWeight:700,marginBottom:6}}>CONSUMO REGISTADO</div>
+              <div style={{fontSize:96,lineHeight:0.9,color:'#fff'}}>Bom apetite.</div>
+            </div>
+          </div>
+          <div style={{background:V.okCard,border:'1px solid rgba(52,211,153,0.3)',borderRadius:22,padding:'24px 28px',marginTop:6}}>
+            <div style={{display:'flex',alignItems:'center',gap:18,marginBottom:6}}>
+              <PratoTag label={status.pratoLabel} large/>
+              <span style={{fontSize:13,color:'rgba(232,249,236,0.5)',letterSpacing:'0.14em',fontWeight:700}}>· O TEU PRATO</span>
+            </div>
+            <div style={{fontSize:42,lineHeight:1.1,color:'#fff',marginTop:8}}>{status.pratoDesc}</div>
+          </div>
+        </div>
+      </div>
+    )
+
+    // Duplicado — takeover âmbar
+    if(status?.type==='dup') {
+      const mins = status.validadoEm ? Math.max(0,Math.round((Date.now()-new Date(status.validadoEm).getTime())/60000)) : null
+      return (
+        <div style={{flex:1,display:'flex',alignItems:'center',padding:'20px 56px 36px',gap:48,position:'relative',zIndex:1}}>
+          <Pessoa func={status.func} ring="rgba(251,191,36,0.55)" metaColor="rgba(254,243,199,0.6)"/>
+          <div style={{flex:1,display:'flex',flexDirection:'column',gap:24}}>
+            <div style={{display:'flex',alignItems:'center',gap:22}}>
+              <div style={{width:132,height:132,borderRadius:'50%',background:'#fbbf24',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 0 0 16px rgba(251,191,36,0.18), 0 24px 64px rgba(0,0,0,0.4)',flexShrink:0}}>
+                <Icon name="warn" size={70} color={V.dup}/>
+              </div>
+              <div>
+                <div style={{fontSize:13,color:'rgba(254,243,199,0.65)',letterSpacing:'0.16em',fontWeight:700,marginBottom:6}}>JÁ FOI VALIDADA</div>
+                <div style={{fontSize:84,lineHeight:0.9,color:'#fff'}}>Calma aí.</div>
+              </div>
+            </div>
+            <div style={{background:V.dupCard,border:'1px solid rgba(251,191,36,0.28)',borderRadius:22,padding:'24px 28px'}}>
+              {status.validadoEm && (
+                <div style={{fontSize:13,color:'rgba(254,243,199,0.55)',letterSpacing:'0.14em',fontWeight:700,marginBottom:6}}>
+                  REGISTADA ÀS {fmtHM(status.validadoEm)}{mins!=null ? ` · HÁ ${mins} ${mins===1?'MINUTO':'MINUTOS'}` : ''}
+                </div>
+              )}
+              <div style={{display:'flex',alignItems:'center',gap:18,marginTop:10}}>
+                <PratoTag label={status.pratoLabel} large/>
+                <div style={{fontSize:32,color:'#fff',lineHeight:1.1}}>{status.pratoDesc}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
+    // Sem marcação — takeover vermelho + seleção de prato
+    if(status?.type==='no-marc') return (
+      <div style={{flex:1,display:'flex',alignItems:'center',padding:'16px 48px 28px',gap:40,position:'relative',zIndex:1}}>
+        <Pessoa func={status.func} ring="rgba(248,113,113,0.55)" avatar={180} font={52} width={300} metaColor="rgba(254,226,226,0.6)"/>
+        <div style={{flex:1,display:'flex',flexDirection:'column',gap:18}}>
+          <div style={{display:'flex',alignItems:'center',gap:18}}>
+            <div style={{width:96,height:96,borderRadius:'50%',background:'#f87171',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 0 0 12px rgba(248,113,113,0.16), 0 16px 48px rgba(0,0,0,0.4)',flexShrink:0}}>
+              <Icon name="x" size={54} color={V.no}/>
+            </div>
+            <div>
+              <div style={{fontSize:12,color:'rgba(254,226,226,0.6)',letterSpacing:'0.16em',fontWeight:700,marginBottom:4}}>SEM MARCAÇÃO PRÉVIA</div>
+              <div style={{fontSize:56,lineHeight:0.95,color:'#fff'}}>Sem marcação.</div>
+            </div>
+          </div>
+          <div style={{background:V.noCard,border:'1px solid rgba(248,113,113,0.22)',borderRadius:20,padding:'18px 20px'}}>
+            <div style={{fontSize:11,fontWeight:700,color:'rgba(254,226,226,0.65)',letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:12}}>Escolhe o prato a servir</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              {[1,2,3,4].map(n => {
+                const label = status.ementa[`prato${n}_label`]
+                const desc  = status.ementa[`prato${n}_desc`]
+                if(!label) return null
+                return (
+                  <button key={n} onClick={()=>confirmarConsumo(status.func,status.ementa,n)}
+                    style={{textAlign:'left',cursor:'pointer',background:V.noBtn,border:'1px solid rgba(248,113,113,0.18)',borderRadius:14,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}}>
+                    <PratoTag label={label}/>
+                    <div style={{fontSize:14,lineHeight:1.3,color:'#fff',fontWeight:500,textWrap:'pretty'}}>{desc}</div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <button onClick={reset} style={{alignSelf:'flex-start',background:'none',border:'none',color:'rgba(254,226,226,0.5)',fontSize:13,textDecoration:'underline',cursor:'pointer',padding:0}}>Cancelar</button>
+        </div>
+      </div>
+    )
+
+    // Standby — hero + últimas validações
+    return (
+      <div style={{flex:1,display:'flex',minHeight:0,position:'relative',zIndex:1}}>
+        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{textAlign:'center'}}>
+            <div style={{position:'relative',width:280,height:280,margin:'0 auto 28px'}}>
+              {[0,0.7,1.4].map(d => (
+                <div key={d} style={{position:'absolute',inset:0,borderRadius:'50%',border:`2px solid ${C.yellow}`,animation:`ff-pulse-ring 2.4s ease-out ${d}s infinite`}} />
+              ))}
+              <div style={{position:'absolute',inset:0,borderRadius:'50%',background:'radial-gradient(circle at center, rgba(224,203,75,0.18) 0%, rgba(224,203,75,0.02) 70%)',border:'2px solid rgba(224,203,75,0.50)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                <Icon name="card-tap" size={140} color={C.yellow}/>
+              </div>
+            </div>
+            <div style={{fontSize:72,lineHeight:0.95,color:C.text,letterSpacing:'-0.01em'}}>Encosta o cartão</div>
+            <div style={{fontSize:18,color:C.textSub,fontStyle:'italic',marginTop:8}}>… ou pressiona qualquer tecla para introduzir o código</div>
+            <button onClick={()=>setManualMode(true)} style={{marginTop:26,background:'none',border:'none',color:C.textMuted,fontSize:14,textDecoration:'underline',cursor:'pointer'}}>Introduzir código manualmente</button>
+          </div>
+        </div>
+        <div style={{width:300,background:V.panel,borderLeft:`1px solid ${C.border}`,display:'flex',flexDirection:'column',flexShrink:0}}>
+          <div style={{padding:'16px 20px 12px',fontSize:11,fontWeight:700,color:C.textMuted,letterSpacing:'0.14em',textTransform:'uppercase',borderBottom:`1px solid ${C.border}`}}>Últimas validações</div>
+          {recentes.length===0
+            ? <div style={{padding:32,textAlign:'center',color:C.textMuted,fontSize:13}}>Sem validações</div>
+            : recentes.map((r,i) => (
+              <div key={r.id} style={{padding:'12px 20px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:12,background:i===0?V.panelHi:'transparent'}}>
+                <Avatar nome={r.nome} foto={r.foto} size={36}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.nome}</div>
+                  <div style={{fontSize:11,color:C.textMuted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtHM(r.validado_em)} · {r.pratoDesc}</div>
+                </div>
+                <PratoTag label={r.pratoLabel}/>
+              </div>
+            ))}
         </div>
       </div>
     )
   }
 
   return (
-    <div style={{height:'100vh',background:C.bg,display:'flex',flexDirection:'column',overflow:'hidden'}}>
-      <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:'0 20px',height:56,display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
-        <Logo size="sm" showSub={false}/>
-        <div style={{display:'flex',alignItems:'center',gap:14}}>
-          <span style={{fontSize:13,color:meal?C.textMuted:C.danger}}>
-            {meal==='A'?'🌞 Almoço':meal==='J'?'🌙 Jantar':'⛔ Encerrada'} · {new Date().toLocaleDateString('pt-PT')}
-          </span>
-          {navigator.serial && (
-            serialStatus==='connected'
-              ? <span style={{fontSize:11,color:C.success,background:C.successBg,border:`1px solid ${C.success}33`,borderRadius:6,padding:'3px 10px',fontWeight:600,display:'flex',alignItems:'center',gap:5}}><span style={{width:6,height:6,borderRadius:'50%',background:C.success,display:'inline-block'}}/>Leitor ligado</span>
-              : serialStatus==='connecting'
-              ? <span style={{fontSize:11,color:C.warn,background:C.warnBg,border:`1px solid ${C.warn}33`,borderRadius:6,padding:'3px 10px'}}>A ligar…</span>
-              : <button onClick={connectSerial} style={{fontSize:12,fontWeight:600,color:C.yellow,background:C.yellow+'18',border:`1px solid ${C.yellow}55`,borderRadius:8,padding:'5px 14px',height:34}}>{serialStatus==='error'?'⚠ Religar':'Conectar leitor'}</button>
-          )}
-          <button onClick={onBack} style={{background:'none',border:'none',color:C.textMuted,fontSize:13}}>← Sair</button>
-        </div>
-      </div>
-      <div style={{display:'flex',flex:1,overflow:'hidden'}}>
-        <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',padding:'24px 28px'}}>
-          <div style={{width:'100%',maxWidth:460}}>{renderMain()}</div>
-        </div>
-        <div style={{width:280,background:C.surface,borderLeft:`1px solid ${C.border}`,display:'flex',flexDirection:'column',overflowY:'auto',flexShrink:0}}>
-          <div style={{padding:'16px 18px 12px',fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:1,borderBottom:`1px solid ${C.border}`}}>Últimas validações</div>
-          {recentes.length===0
-            ? <div style={{padding:32,textAlign:'center',color:C.textMuted,fontSize:13}}>Sem validações</div>
-            : recentes.map((r,i) => {
-              const p=ps(r.pratoLabel),isFirst=i===0
-              return (
-                <div key={r.id} style={{padding:isFirst?'18px':'14px 18px',borderBottom:`1px solid ${C.border}`,background:isFirst?C.surface2:'transparent'}}>
-                  <div style={{display:'flex',alignItems:'center',gap:12,marginBottom:8}}>
-                    <Avatar nome={r.nome} foto={r.foto} size={isFirst?46:36}/>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:isFirst?16:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.nome}</div>
-                      <div style={{fontSize:11,color:C.textMuted,marginTop:1}}>{fmtHM(r.validado_em)}</div>
-                    </div>
-                  </div>
-                  <div style={{display:'flex',alignItems:'center',gap:10,background:p.bg,border:`1px solid ${p.border}`,borderRadius:8,padding:isFirst?'8px 12px':'6px 10px'}}>
-                    <PratoTag label={r.pratoLabel} large={isFirst}/><span style={{fontSize:isFirst?14:12,color:C.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.pratoDesc}</span>
-                  </div>
+    <div style={{height:'100vh',background:bg,color:C.text,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}>
+      {glow && <div style={{position:'absolute',inset:0,pointerEvents:'none',background:glow}} />}
+      {renderTop()}
+      {renderMain()}
+      {isStandby && contadores.length>0 && (
+        <div style={{borderTop:`1px solid ${C.border}`,background:V.panel,padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0,position:'relative',zIndex:1}}>
+          <div style={{fontSize:11,color:C.textMuted,fontWeight:700,letterSpacing:'0.14em',textTransform:'uppercase'}}>Faltam servir</div>
+          {contadores.map(c => {
+            const p = ps(c.label)
+            return (
+              <div key={c.n} style={{display:'flex',alignItems:'center',gap:12,padding:'8px 14px',background:p.bg,border:`1px solid ${p.border}`,borderRadius:99,flex:1,justifyContent:'space-between'}}>
+                <PratoTag label={c.label}/>
+                <div style={{display:'flex',alignItems:'baseline',gap:4}}>
+                  <span style={{fontSize:28,fontWeight:900,color:p.color,lineHeight:1}}>{c.left}</span>
+                  <span style={{fontSize:12,color:C.textMuted}}>/ {c.total}</span>
                 </div>
-              )
-            })}
+              </div>
+            )
+          })}
         </div>
-      </div>
+      )}
     </div>
   )
 }
