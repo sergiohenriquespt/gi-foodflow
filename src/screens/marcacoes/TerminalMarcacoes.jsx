@@ -80,14 +80,14 @@ export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}
   const onUidRef = useRef(uid => {
     const f = funcionarios.find(f => f.rfid === uid)
     if (!f || !f.ativo) { setRfidMsg(`Cartão lido: ${uid} — não encontrado.`); setTimeout(()=>setRfidMsg(''),5000); return }
-    setRfidMsg(''); loginFunc(f)
+    setRfidMsg(''); loginFunc(f, true)
   })
   // Atualiza o ref quando funcionarios muda
   useEffect(() => {
     onUidRef.current = uid => {
       const f = funcionarios.find(f => f.rfid === uid)
       if (!f || !f.ativo) { setRfidMsg(`Cartão lido: ${uid} — não encontrado.`); setTimeout(()=>setRfidMsg(''),5000); return }
-      setRfidMsg(''); loginFunc(f)
+      setRfidMsg(''); loginFunc(f, true)
     }
   }, [funcionarios])
 
@@ -109,9 +109,9 @@ export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}
 
   const loadMarcacoes = async fid => { const{data}=await supabase.from('cantina_marcacoes').select('*').eq('funcionario_id',fid); setMarcacoes(data||[]) }
 
-  const loginFunc = f => {
+  const loginFunc = (f, viaRfid = false) => {
     loadMarcacoes(f.id)
-    if(f.pin){setFunc(f);setStep('pin');setNumInput('');setErr('')}
+    if(f.pin && !viaRfid){setFunc(f);setStep('pin');setNumInput('');setErr('')}
     else{setFunc(f);setStep('dashboard');setNumInput('');setErr('')}
   }
 
