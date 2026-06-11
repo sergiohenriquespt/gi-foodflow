@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { C } from '../../constants/colors'
 import { ps } from '../../constants/pratos'
-import { WD, MN_FULL, TODAY, addD } from '../../utils/date'
+import { WD, MN_FULL, TODAY, addD, d2s } from '../../utils/date'
 import EmentaEditor from './EmentaEditor'
 import Icon from '../../components/Icon'
 
@@ -11,6 +11,13 @@ function isoWeekNum(dateStr) {
   d.setDate(d.getDate() + 4 - (d.getDay() || 7))
   const y = new Date(d.getFullYear(), 0, 1)
   return Math.ceil((((d - y) / 86400000) + 1) / 7)
+}
+
+function getMondayOf(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00')
+  const diff = d.getDay() === 0 ? -6 : 1 - d.getDay()
+  d.setDate(d.getDate() + diff)
+  return d2s(d)
 }
 
 function fmtRange(dates) {
@@ -100,18 +107,21 @@ function EmentaCell({ ementa, marcCount, onClick }) {
   )
 }
 
-export default function SecEmentas({ementas,reload,marcacoesAll=[]}) {
+export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
   const [weekOffset,setWeekOffset] = useState(0)
   const [editingCell,setEditingCell] = useState(null)
   const [saving,setSaving] = useState(false)
 
-  const weekDates = Array.from({length:5}, (_,i) => addD(TODAY, weekOffset*5 + i))
+  const servir_fds = settings?.servir_fds === 'true'
+  const daysPerWeek = servir_fds ? 7 : 5
+  const weekStart = getMondayOf(TODAY)
+  const weekDates = Array.from({length:daysPerWeek}, (_,i) => addD(weekStart, weekOffset*7 + i))
   const weekNum = isoWeekNum(weekDates[0])
 
   const weekEmentas = ementas.filter(e => weekDates.includes(e.data))
   const filledCount = weekEmentas.reduce((acc,e) =>
     acc + [1,2,3,4].filter(n => e[`prato${n}_desc`]).length, 0)
-  const totalSlots = weekDates.length * 2 * 4
+  const totalSlots = daysPerWeek * 2 * 4
   const totalMarcs = marcacoesAll.filter(m => weekDates.includes(m.data)).length
 
   const newEmenta = (data,tipo) => ({
@@ -171,13 +181,13 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[]}) {
       {/* Grid */}
       <div style={{flex:1,padding:'20px 24px 24px',overflow:'hidden',display:'flex',flexDirection:'column',gap:12}}>
         {/* Day headers */}
-        <div style={{display:'grid',gridTemplateColumns:'70px repeat(5, 1fr)',gap:12}}>
+        <div style={{display:'grid',gridTemplateColumns:`70px repeat(${daysPerWeek}, 1fr)`,gap:12}}>
           <div/>
           {weekDates.map(d => <DayHeader key={d} date={d}/>)}
         </div>
 
         {/* Almoço row */}
-        <div style={{display:'grid',gridTemplateColumns:'70px repeat(5, 1fr)',gap:12,flex:1,minHeight:0}}>
+        <div style={{display:'grid',gridTemplateColumns:`70px repeat(${daysPerWeek}, 1fr)`,gap:12,flex:1,minHeight:0}}>
           <MealLabel emoji="🌞" label="Almoço" hour="12:00 — 14:30"/>
           {weekDates.map(d => {
             const em = ementas.find(e=>e.data===d&&e.tipo==='A')
@@ -187,7 +197,7 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[]}) {
         </div>
 
         {/* Jantar row */}
-        <div style={{display:'grid',gridTemplateColumns:'70px repeat(5, 1fr)',gap:12,flex:1,minHeight:0}}>
+        <div style={{display:'grid',gridTemplateColumns:`70px repeat(${daysPerWeek}, 1fr)`,gap:12,flex:1,minHeight:0}}>
           <MealLabel emoji="🌙" label="Jantar" hour="19:00 — 21:30"/>
           {weekDates.map(d => {
             const em = ementas.find(e=>e.data===d&&e.tipo==='J')

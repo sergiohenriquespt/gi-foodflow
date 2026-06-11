@@ -78,7 +78,7 @@ export default function Backoffice({funcionarios,ementas,marcacoesAll,consumos,s
 
         {/* Content */}
         {sec==='ementas'
-          ? <SecEmentas ementas={ementas} reload={reload} marcacoesAll={marcacoesAll}/>
+          ? <SecEmentas ementas={ementas} reload={reload} marcacoesAll={marcacoesAll} settings={settings}/>
           : <div style={{flex:1,overflow:'auto',padding:20}}>
               {sec==='funcs'     && <SecFuncionarios funcionarios={funcionarios} reload={reload}/>}
               {sec==='consumos'  && <SecConsumos consumos={consumos} funcionarios={funcionarios} ementas={ementas}/>}
