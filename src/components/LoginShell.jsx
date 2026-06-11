@@ -25,7 +25,7 @@ export default function LoginShell({leftPanel, value, secret=false, onChange, on
   return (
     <div style={{height:'100vh',background:A.bg,color:A.ink,display:'flex',flexDirection:'column',overflow:'hidden',position:'relative'}}>
       <div style={{position:'absolute',inset:0,pointerEvents:'none',background:'radial-gradient(circle at 80% 10%, rgba(224,203,75,0.16) 0%, transparent 55%)'}} />
-      <div style={{position:'absolute',top:0,left:0,right:0,padding:'24px 36px',display:'flex',alignItems:'center',justifyContent:'space-between',zIndex:1}}>
+      <div style={{position:'absolute',top:0,left:0,right:0,padding:'24px 36px',display:'flex',alignItems:'center',justifyContent:'space-between',zIndex:2}}>
         <div style={{display:'flex',alignItems:'center',gap:16}}>
           <Logo size="sm" />
           {onBack && <button onClick={onBack} style={{background:'none',border:`1px solid ${A.border}`,borderRadius:8,padding:'6px 14px',color:A.ink3,fontSize:12,cursor:'pointer',marginLeft:8}}>← Voltar</button>}
