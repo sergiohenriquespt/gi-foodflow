@@ -138,6 +138,7 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
   const [editingCell,setEditingCell] = useState(null)
   const [saving,setSaving] = useState(false)
   const [diasFechados,setDiasFechados] = useState([])
+  const [delStatus,setDelStatus] = useState(null)
 
   useEffect(() => { fetchDiasFechados().then(setDiasFechados) }, [])
 
@@ -182,10 +183,20 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
     setEditingCell(null)
   }
 
-  const del = async id => {
-    if (!window.confirm('Eliminar ementa?')) return
+  const checkDel = async id => {
+    const [{count:nCons},{count:nMarcs}] = await Promise.all([
+      supabase.from('cantina_consumos').select('*',{count:'exact',head:true}).eq('ementa_id',id),
+      supabase.from('cantina_marcacoes').select('*',{count:'exact',head:true}).eq('ementa_id',id),
+    ])
+    if (nCons > 0) { setDelStatus({type:'blocked',nCons,id}); return }
+    if (nMarcs > 0) { setDelStatus({type:'confirm',nMarcs,id}); return }
+    await doDelete(id)
+  }
+
+  const doDelete = async id => {
     await supabase.from('cantina_ementas').delete().eq('id',id)
     await reload()
+    setDelStatus(null)
     setEditingCell(null)
   }
 
@@ -265,8 +276,11 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
               <EmentaEditor
                 ementa={editEm}
                 onSave={save}
-                onCancel={()=>setEditingCell(null)}
-                onDelete={editEm.id ? ()=>del(editEm.id) : undefined}
+                onCancel={()=>{setEditingCell(null);setDelStatus(null)}}
+                onDelete={editEm.id ? ()=>checkDel(editEm.id) : undefined}
+                onDeleteConfirm={()=>doDelete(delStatus?.id)}
+                onDeleteCancel={()=>setDelStatus(null)}
+                delStatus={delStatus}
                 saving={saving}/>
             </div>
           </>

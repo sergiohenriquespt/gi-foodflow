@@ -4,7 +4,7 @@ import { ps } from '../../constants/pratos'
 import { fmtF } from '../../utils/date'
 import Icon from '../../components/Icon'
 
-export default function EmentaEditor({ementa,onSave,onCancel,onDelete,saving}) {
+export default function EmentaEditor({ementa,onSave,onCancel,onDelete,onDeleteConfirm,onDeleteCancel,delStatus,saving}) {
   const [f,setF] = useState({...ementa})
   const set = (k,v) => setF(p=>({...p,[k]:v}))
 
@@ -42,20 +42,53 @@ export default function EmentaEditor({ementa,onSave,onCancel,onDelete,saving}) {
         )
       })}
 
+      {/* Delete feedback */}
+      {delStatus?.type === 'blocked' && (
+        <div style={{marginTop:16,padding:'12px 14px',background:`${C.danger}0d`,border:`1px solid ${C.danger}44`,borderRadius:10}}>
+          <div style={{fontSize:13,fontWeight:700,color:C.danger,marginBottom:3}}>Não é possível eliminar</div>
+          <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>
+            Esta ementa tem <strong style={{color:C.text}}>{delStatus.nCons}</strong> consumo{delStatus.nCons!==1?'s':''} registado{delStatus.nCons!==1?'s':''}. Os registos históricos não podem ser apagados.
+          </div>
+        </div>
+      )}
+      {delStatus?.type === 'confirm' && (
+        <div style={{marginTop:16,padding:'12px 14px',background:'rgba(251,146,60,0.08)',border:'1px solid rgba(251,146,60,0.3)',borderRadius:10}}>
+          <div style={{fontSize:13,fontWeight:700,color:'#fb923c',marginBottom:3}}>Atenção</div>
+          <div style={{fontSize:12,color:C.textSub,lineHeight:1.5}}>
+            Esta ementa tem <strong style={{color:C.text}}>{delStatus.nMarcs}</strong> marcaç{delStatus.nMarcs!==1?'ões':'ão'}. Ao eliminar, as marcações serão removidas permanentemente.
+          </div>
+        </div>
+      )}
+
       {/* Buttons */}
-      <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:18,alignItems:'center'}}>
-        {onDelete && (
+      <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:16,alignItems:'center'}}>
+        {!delStatus && onDelete && (
           <button onClick={onDelete} style={{height:40,padding:'0 18px',background:'transparent',border:`1px solid ${C.danger}44`,borderRadius:99,fontSize:14,color:C.danger,cursor:'pointer',marginRight:'auto'}}>
             Remover
           </button>
         )}
-        <button onClick={onCancel} style={{height:40,padding:'0 18px',background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,fontSize:14,color:C.textSub,cursor:'pointer'}}>
-          Cancelar
-        </button>
-        <button onClick={()=>onSave(f)} disabled={saving}
-          style={{height:40,padding:'0 22px',background:C.yellow,border:'none',borderRadius:99,fontSize:14,fontWeight:700,color:C.bg,cursor:'pointer'}}>
-          {saving?'A guardar…':'Guardar'}
-        </button>
+        {delStatus?.type === 'blocked' && (
+          <button onClick={onDeleteCancel} style={{height:40,padding:'0 18px',background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,fontSize:14,color:C.textSub,cursor:'pointer',marginLeft:'auto'}}>
+            OK, entendi
+          </button>
+        )}
+        {delStatus?.type === 'confirm' && (<>
+          <button onClick={onDeleteCancel} style={{height:40,padding:'0 18px',background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,fontSize:14,color:C.textSub,cursor:'pointer',marginRight:'auto'}}>
+            Cancelar
+          </button>
+          <button onClick={onDeleteConfirm} style={{height:40,padding:'0 18px',background:`${C.danger}18`,border:`1px solid ${C.danger}55`,borderRadius:99,fontSize:14,fontWeight:700,color:C.danger,cursor:'pointer'}}>
+            Confirmar eliminação
+          </button>
+        </>)}
+        {!delStatus && (<>
+          <button onClick={onCancel} style={{height:40,padding:'0 18px',background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,fontSize:14,color:C.textSub,cursor:'pointer'}}>
+            Cancelar
+          </button>
+          <button onClick={()=>onSave(f)} disabled={saving}
+            style={{height:40,padding:'0 22px',background:C.yellow,border:'none',borderRadius:99,fontSize:14,fontWeight:700,color:C.bg,cursor:'pointer'}}>
+            {saving?'A guardar…':'Guardar'}
+          </button>
+        </>)}
       </div>
     </div>
   )
