@@ -365,8 +365,12 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
               </div>
             </div>
             <div style={{fontSize:72,lineHeight:0.95,color:C.text,letterSpacing:'-0.01em'}}>Encosta o cartão</div>
-            <div style={{fontSize:18,color:C.textSub,fontStyle:'italic',marginTop:8}}>… ou pressiona qualquer tecla para introduzir o código</div>
-            <button onClick={()=>setManualMode(true)} style={{marginTop:26,background:'none',border:'none',color:C.textMuted,fontSize:14,textDecoration:'underline',cursor:'pointer'}}>Introduzir código manualmente</button>
+            <button onClick={()=>setManualMode(true)}
+              style={{marginTop:32,height:54,padding:'0 30px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:99,color:C.textSub,fontSize:15,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:10,transition:'border-color 0.15s'}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=`${C.yellow}55`;e.currentTarget.style.color=C.text}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textSub}}>
+              Introduzir código manualmente
+            </button>
           </div>
         </div>
         <div style={{width:300,background:V.panel,borderLeft:`1px solid ${C.border}`,display:'flex',flexDirection:'column',flexShrink:0}}>
