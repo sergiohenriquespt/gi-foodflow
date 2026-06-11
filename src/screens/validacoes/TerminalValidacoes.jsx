@@ -377,16 +377,21 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
           <div style={{padding:'16px 20px 12px',fontSize:11,fontWeight:700,color:C.textMuted,letterSpacing:'0.14em',textTransform:'uppercase',borderBottom:`1px solid ${C.border}`}}>Últimas validações</div>
           {recentes.length===0
             ? <div style={{padding:32,textAlign:'center',color:C.textMuted,fontSize:13}}>Sem validações</div>
-            : recentes.map((r,i) => (
-              <div key={r.id} style={{padding:'12px 20px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:12,background:i===0?V.panelHi:'transparent'}}>
-                <Avatar nome={r.nome} foto={r.foto} size={36}/>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.nome}</div>
-                  <div style={{fontSize:11,color:C.textMuted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{fmtHM(r.validado_em)} · {r.pratoDesc}</div>
+            : recentes.map((r,i) => {
+              const p = ps(r.pratoLabel)
+              return (
+                <div key={r.id} style={{padding:'12px 20px',borderBottom:`1px solid ${p.border}`,display:'flex',alignItems:'center',gap:12,background:p.bg,outline:i===0?`1.5px solid ${p.border}`:'none',outlineOffset:'-1.5px'}}>
+                  <Avatar nome={r.nome} foto={r.foto} size={36}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.nome}</div>
+                    <div style={{fontSize:11,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      <span style={{color:p.color,fontWeight:600}}>{r.pratoLabel}</span>
+                      <span style={{color:C.textMuted}}> · {fmtHM(r.validado_em)}</span>
+                    </div>
+                  </div>
                 </div>
-                <PratoTag label={r.pratoLabel}/>
-              </div>
-            ))}
+              )
+            })}
         </div>
       </div>
     )
