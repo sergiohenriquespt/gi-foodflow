@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
+import { fetchDiasFechados, setDiaFechado, unsetDiaFechado } from '../../lib/queries'
 import { C } from '../../constants/colors'
 import { ps } from '../../constants/pratos'
 import { WD, MN_FULL, TODAY, addD, d2s } from '../../utils/date'
@@ -29,19 +30,34 @@ function fmtRange(dates) {
   return `${a.getDate()} de ${MN_FULL[a.getMonth()]} a ${b.getDate()} de ${MN_FULL[b.getMonth()]}`
 }
 
-function DayHeader({ date }) {
+function DayHeader({ date, closed, onToggle }) {
   const dd = new Date(date + 'T12:00:00')
   const isToday = date === TODAY
   return (
     <div style={{padding:'8px 14px',display:'flex',alignItems:'baseline',gap:8,position:'relative'}}>
-      <span style={{fontSize:46,lineHeight:0.85,color:C.text}}>{dd.getDate()}</span>
+      <span style={{fontSize:46,lineHeight:0.85,color:closed?C.textMuted:C.text,transition:'color 0.15s'}}>{dd.getDate()}</span>
       <span style={{fontSize:12,fontWeight:700,letterSpacing:'0.12em',color:C.textMuted}}>
         {WD[dd.getDay()].slice(0,3).toUpperCase()}
       </span>
-      {isToday && (
+      {isToday && !closed && (
         <span style={{position:'absolute',top:0,right:14,fontSize:9,fontWeight:800,letterSpacing:'0.16em',background:C.yellow,color:C.bg,padding:'3px 8px',borderRadius:4}}>
           HOJE
         </span>
+      )}
+      {closed ? (
+        <button onClick={onToggle}
+          style={{position:'absolute',top:0,right:14,fontSize:9,fontWeight:800,letterSpacing:'0.10em',background:'rgba(251,146,60,0.15)',color:'#fb923c',border:'1px solid rgba(251,146,60,0.28)',padding:'3px 8px',borderRadius:4,cursor:'pointer'}}
+          onMouseEnter={e=>e.currentTarget.style.background='rgba(251,146,60,0.28)'}
+          onMouseLeave={e=>e.currentTarget.style.background='rgba(251,146,60,0.15)'}>
+          ENCERRADO ×
+        </button>
+      ) : (
+        <button onClick={onToggle}
+          style={{position:'absolute',top:0,right:14,fontSize:9,fontWeight:700,letterSpacing:'0.08em',background:'transparent',color:C.border,border:'1px solid transparent',padding:'3px 8px',borderRadius:4,cursor:'pointer'}}
+          onMouseEnter={e=>{e.currentTarget.style.color=C.textMuted;e.currentTarget.style.borderColor=C.border}}
+          onMouseLeave={e=>{e.currentTarget.style.color=C.border;e.currentTarget.style.borderColor='transparent'}}>
+          Encerrar
+        </button>
       )}
     </div>
   )
@@ -55,6 +71,14 @@ function MealLabel({ emoji, label, hour }) {
         <div style={{fontStyle:'italic',fontSize:24,color:C.text,marginTop:8}}>{label}</div>
         <div style={{fontSize:10,color:C.textMuted,marginTop:6,letterSpacing:'0.12em'}}>{hour}</div>
       </div>
+    </div>
+  )
+}
+
+function ClosedCell() {
+  return (
+    <div style={{background:'rgba(251,146,60,0.04)',border:'1px dashed rgba(251,146,60,0.18)',borderRadius:14,display:'flex',alignItems:'center',justifyContent:'center',minHeight:0,color:'rgba(251,146,60,0.25)',fontSize:20,userSelect:'none'}}>
+      —
     </div>
   )
 }
@@ -111,6 +135,16 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
   const [weekOffset,setWeekOffset] = useState(0)
   const [editingCell,setEditingCell] = useState(null)
   const [saving,setSaving] = useState(false)
+  const [diasFechados,setDiasFechados] = useState([])
+
+  useEffect(() => { fetchDiasFechados().then(setDiasFechados) }, [])
+
+  const toggleDia = async date => {
+    const isClosed = diasFechados.includes(date)
+    setDiasFechados(p => isClosed ? p.filter(d=>d!==date) : [...p,date])
+    if (isClosed) await unsetDiaFechado(date)
+    else await setDiaFechado(date)
+  }
 
   const servir_fds = settings?.servir_fds === 'true'
   const daysPerWeek = servir_fds ? 7 : 5
@@ -121,7 +155,8 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
   const weekEmentas = ementas.filter(e => weekDates.includes(e.data))
   const filledCount = weekEmentas.reduce((acc,e) =>
     acc + [1,2,3,4].filter(n => e[`prato${n}_desc`]).length, 0)
-  const totalSlots = daysPerWeek * 2 * 4
+  const closedThisWeek = weekDates.filter(d => diasFechados.includes(d))
+  const totalSlots = (daysPerWeek - closedThisWeek.length) * 2 * 4
   const totalMarcs = marcacoesAll.filter(m => weekDates.includes(m.data)).length
 
   const newEmenta = (data,tipo) => ({
@@ -183,13 +218,14 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
         {/* Day headers */}
         <div style={{display:'grid',gridTemplateColumns:`70px repeat(${daysPerWeek}, 1fr)`,gap:12}}>
           <div/>
-          {weekDates.map(d => <DayHeader key={d} date={d}/>)}
+          {weekDates.map(d => <DayHeader key={d} date={d} closed={diasFechados.includes(d)} onToggle={()=>toggleDia(d)}/>)}
         </div>
 
         {/* Almoço row */}
         <div style={{display:'grid',gridTemplateColumns:`70px repeat(${daysPerWeek}, 1fr)`,gap:12,flex:1,minHeight:0}}>
           <MealLabel emoji="🌞" label="Almoço" hour="12:00 — 14:30"/>
           {weekDates.map(d => {
+            if (diasFechados.includes(d)) return <ClosedCell key={d}/>
             const em = ementas.find(e=>e.data===d&&e.tipo==='A')
             const marcs = marcacoesAll.filter(m=>m.ementa_id===em?.id).length
             return <EmentaCell key={d} ementa={em} marcCount={marcs} onClick={()=>setEditingCell({data:d,tipo:'A'})}/>
@@ -200,6 +236,7 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
         <div style={{display:'grid',gridTemplateColumns:`70px repeat(${daysPerWeek}, 1fr)`,gap:12,flex:1,minHeight:0}}>
           <MealLabel emoji="🌙" label="Jantar" hour="19:00 — 21:30"/>
           {weekDates.map(d => {
+            if (diasFechados.includes(d)) return <ClosedCell key={d}/>
             const em = ementas.find(e=>e.data===d&&e.tipo==='J')
             const marcs = marcacoesAll.filter(m=>m.ementa_id===em?.id).length
             return <EmentaCell key={d} ementa={em} marcCount={marcs} onClick={()=>setEditingCell({data:d,tipo:'J'})}/>

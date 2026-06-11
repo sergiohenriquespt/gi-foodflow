@@ -13,3 +13,10 @@ export const fetchDefinicoes    = async () => {
 }
 export const saveDefinicao = async (chave,valor) =>
   supabase.from('cantina_definicoes').upsert({chave,valor,updated_at:new Date().toISOString()})
+
+export const fetchDiasFechados = async () => {
+  const {data} = await supabase.from('cantina_dias_fechados').select('data')
+  return (data||[]).map(r => r.data)
+}
+export const setDiaFechado   = async data => supabase.from('cantina_dias_fechados').insert({data})
+export const unsetDiaFechado = async data => supabase.from('cantina_dias_fechados').delete().eq('data',data)
