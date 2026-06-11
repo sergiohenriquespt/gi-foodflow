@@ -39,26 +39,28 @@ function DayHeader({ date, closed, onToggle }) {
       <span style={{fontSize:12,fontWeight:700,letterSpacing:'0.12em',color:C.textMuted}}>
         {WD[dd.getDay()].slice(0,3).toUpperCase()}
       </span>
-      {isToday && !closed && (
-        <span style={{position:'absolute',top:0,right:14,fontSize:9,fontWeight:800,letterSpacing:'0.16em',background:C.yellow,color:C.bg,padding:'3px 8px',borderRadius:4}}>
-          HOJE
-        </span>
-      )}
-      {closed ? (
-        <button onClick={onToggle}
-          style={{position:'absolute',top:0,right:14,fontSize:9,fontWeight:800,letterSpacing:'0.10em',background:'rgba(251,146,60,0.15)',color:'#fb923c',border:'1px solid rgba(251,146,60,0.28)',padding:'3px 8px',borderRadius:4,cursor:'pointer'}}
-          onMouseEnter={e=>e.currentTarget.style.background='rgba(251,146,60,0.28)'}
-          onMouseLeave={e=>e.currentTarget.style.background='rgba(251,146,60,0.15)'}>
-          ENCERRADO ×
-        </button>
-      ) : (
-        <button onClick={onToggle}
-          style={{position:'absolute',top:0,right:14,fontSize:9,fontWeight:700,letterSpacing:'0.08em',background:'transparent',color:C.border,border:'1px solid transparent',padding:'3px 8px',borderRadius:4,cursor:'pointer'}}
-          onMouseEnter={e=>{e.currentTarget.style.color=C.textMuted;e.currentTarget.style.borderColor=C.border}}
-          onMouseLeave={e=>{e.currentTarget.style.color=C.border;e.currentTarget.style.borderColor='transparent'}}>
-          Encerrar
-        </button>
-      )}
+      <div style={{position:'absolute',top:0,right:14,display:'flex',alignItems:'center',gap:4}}>
+        {isToday && (
+          <span style={{fontSize:9,fontWeight:800,letterSpacing:'0.16em',background:C.yellow,color:C.bg,padding:'3px 8px',borderRadius:4}}>
+            HOJE
+          </span>
+        )}
+        {closed ? (
+          <button onClick={onToggle}
+            style={{fontSize:9,fontWeight:800,letterSpacing:'0.10em',background:'rgba(251,146,60,0.15)',color:'#fb923c',border:'1px solid rgba(251,146,60,0.28)',padding:'3px 8px',borderRadius:4,cursor:'pointer'}}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(251,146,60,0.28)'}
+            onMouseLeave={e=>e.currentTarget.style.background='rgba(251,146,60,0.15)'}>
+            ENCERRADO ×
+          </button>
+        ) : (
+          <button onClick={onToggle}
+            style={{fontSize:9,fontWeight:700,letterSpacing:'0.08em',background:'transparent',color:C.border,border:'1px solid transparent',padding:'3px 8px',borderRadius:4,cursor:'pointer'}}
+            onMouseEnter={e=>{e.currentTarget.style.color=C.textMuted;e.currentTarget.style.borderColor=C.border}}
+            onMouseLeave={e=>{e.currentTarget.style.color=C.border;e.currentTarget.style.borderColor='transparent'}}>
+            Encerrar
+          </button>
+        )}
+      </div>
     </div>
   )
 }
