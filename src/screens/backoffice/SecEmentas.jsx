@@ -144,8 +144,11 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
   const toggleDia = async date => {
     const isClosed = diasFechados.includes(date)
     setDiasFechados(p => isClosed ? p.filter(d=>d!==date) : [...p,date])
-    if (isClosed) await unsetDiaFechado(date)
-    else await setDiaFechado(date)
+    const {error} = isClosed ? await unsetDiaFechado(date) : await setDiaFechado(date)
+    if (error) {
+      setDiasFechados(p => isClosed ? [...p,date] : p.filter(d=>d!==date))
+      console.error('toggleDia:', error)
+    }
   }
 
   const servir_fds = settings?.servir_fds === 'true'
