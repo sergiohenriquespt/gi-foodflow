@@ -6,6 +6,7 @@ export const FIRST_MONTH = () => { const d=new Date(); return `${d.getFullYear()
 export const WD      = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb']
 export const WD_FULL = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado']
 export const MN      = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+export const MN_FULL = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
 
 export const fmtS  = s => { const d=new Date(s+'T12:00:00'); return `${WD[d.getDay()]} ${d.getDate()} ${MN[d.getMonth()]}` }
 export const fmtF  = s => { const d=new Date(s+'T12:00:00'); return `${WD_FULL[d.getDay()]}, ${d.getDate()} de ${MN[d.getMonth()]}` }
