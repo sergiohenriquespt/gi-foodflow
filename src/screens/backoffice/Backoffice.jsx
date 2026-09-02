@@ -9,7 +9,7 @@ import SecConsumos from './SecConsumos'
 import SecMarcacoes from './SecMarcacoes'
 import SecDefinicoes from './SecDefinicoes'
 
-export default function Backoffice({funcionarios,ementas,marcacoesAll,consumos,settings,reload,onBack}) {
+export default function Backoffice({funcionarios,ementas,marcacoesAll,consumos,visitantes,settings,reload,onBack}) {
   const [sec,setSec] = useState('ementas')
   const nav = [
     {key:'ementas',   icon:'calendar', label:'Ementas'},
@@ -81,7 +81,7 @@ export default function Backoffice({funcionarios,ementas,marcacoesAll,consumos,s
           ? <SecEmentas ementas={ementas} reload={reload} marcacoesAll={marcacoesAll} settings={settings}/>
           : <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
               {sec==='funcs'     && <SecFuncionarios funcionarios={funcionarios} reload={reload}/>}
-              {sec==='consumos'  && <SecConsumos consumos={consumos} funcionarios={funcionarios} ementas={ementas}/>}
+              {sec==='consumos'  && <SecConsumos consumos={consumos} visitantes={visitantes} funcionarios={funcionarios} ementas={ementas}/>}
               {sec==='marcacoes' && <SecMarcacoes marcacoes={marcacoesAll} funcionarios={funcionarios} ementas={ementas}/>}
               {sec==='definicoes'&& <SecDefinicoes settings={settings} reload={reload}/>}
             </div>

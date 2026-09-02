@@ -3,13 +3,14 @@ import { C } from '../../constants/colors'
 import { FIRST_MONTH, TODAY, fmtS, fmtHM } from '../../utils/date'
 import Avatar from '../../components/Avatar'
 import PratoTag from '../../components/PratoTag'
+import Icon from '../../components/Icon'
 
 const EYE  = {fontSize:11,fontWeight:700,color:'#64748b',letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:2}
 const BIG  = {fontStyle:'italic',fontSize:26,color:'#e2e8f0',lineHeight:1}
-const COLS = '1fr 120px 95px 105px 72px'
+const COLS = '1fr 60px 120px 95px 105px 72px'
 const TH   = {fontSize:11,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.1em'}
 
-export default function SecConsumos({consumos, funcionarios, ementas}) {
+export default function SecConsumos({consumos, visitantes=[], funcionarios, ementas}) {
   const [fStart, setFStart] = useState(FIRST_MONTH())
   const [fEnd,   setFEnd]   = useState(TODAY)
   const [fMeal,  setFMeal]  = useState('')
@@ -27,8 +28,31 @@ export default function SecConsumos({consumos, funcionarios, ementas}) {
     (!fEnd   || c.data <= fEnd)   &&
     (!fMeal  || c.tipo === fMeal)
   )
-  const sorted = [...filtered].sort((a, b) => new Date(b.validado_em) - new Date(a.validado_em))
-  const stats  = {total:filtered.length, a:filtered.filter(c=>c.tipo==='A').length, j:filtered.filter(c=>c.tipo==='J').length}
+
+  const enrichedVisitantes = visitantes.map(v => {
+    const em = ementas.find(e => e.id === v.ementa_id)
+    if (!em) return null
+    const pk = `prato${v.prato_num}`
+    return {...v, data:em.data, tipo:em.tipo, pratoLabel:em[pk+'_label']}
+  }).filter(Boolean)
+
+  const filteredVisitantes = enrichedVisitantes.filter(v =>
+    (!fStart || v.data >= fStart) &&
+    (!fEnd   || v.data <= fEnd)   &&
+    (!fMeal  || v.tipo === fMeal)
+  )
+
+  const sorted = [
+    ...filtered.map(c => ({key:`c-${c.id}`, ts:c.validado_em, data:c.data, tipo:c.tipo, pratoLabel:c.pratoLabel, quantidade:1, nome:c.nome, foto:c.foto, numero:c.numero})),
+    ...filteredVisitantes.map(v => ({key:`v-${v.id}`, ts:v.registado_em, data:v.data, tipo:v.tipo, pratoLabel:v.pratoLabel, quantidade:v.quantidade})),
+  ].sort((a, b) => new Date(b.ts) - new Date(a.ts))
+
+  const stats = {
+    total: filtered.length,
+    a: filtered.filter(c=>c.tipo==='A').length,
+    j: filtered.filter(c=>c.tipo==='J').length,
+    visitantes: filteredVisitantes.reduce((s,v)=>s+v.quantidade,0),
+  }
 
   const pill = {height:34,padding:'0 14px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:99,color:C.text,fontSize:12,outline:'none',cursor:'pointer'}
 
@@ -53,6 +77,11 @@ export default function SecConsumos({consumos, funcionarios, ementas}) {
             <span style={{display:'inline-flex',alignItems:'center',gap:5}}>
               🌙 <strong style={{color:C.text}}>{stats.j}</strong> jantares
             </span>
+          </div>
+          <div style={{width:1,height:28,background:C.border}}/>
+          <div>
+            <div style={EYE}>Visitantes</div>
+            <div style={BIG}>{stats.visitantes}</div>
           </div>
         </div>
 
@@ -84,7 +113,7 @@ export default function SecConsumos({consumos, funcionarios, ementas}) {
 
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COLS,padding:'10px 18px',gap:14,background:C.surface2,borderBottom:`1px solid ${C.border}`,alignItems:'center'}}>
-            {['Funcionário','Data','Refeição','Prato','Hora'].map(h => (
+            {['Funcionário','Qtd','Data','Refeição','Prato','Hora'].map(h => (
               <div key={h} style={TH}>{h}</div>
             ))}
           </div>
@@ -92,24 +121,33 @@ export default function SecConsumos({consumos, funcionarios, ementas}) {
           {/* Rows */}
           {sorted.length === 0
             ? <div style={{padding:'44px 0',textAlign:'center',color:C.textMuted,fontSize:13,fontStyle:'italic'}}>
-                {consumos.length === 0 ? 'Sem consumos registados.' : 'Sem registos para os filtros aplicados.'}
+                {consumos.length === 0 && visitantes.length === 0 ? 'Sem consumos registados.' : 'Sem registos para os filtros aplicados.'}
               </div>
             : sorted.map(c => (
-              <div key={c.id}
+              <div key={c.key}
                 onMouseEnter={e => e.currentTarget.style.background = C.surface2}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 style={{display:'grid',gridTemplateColumns:COLS,padding:'10px 18px',gap:14,borderTop:`1px solid ${C.border}`,alignItems:'center',transition:'background 0.1s'}}>
-                <div style={{display:'flex',alignItems:'center',gap:10}}>
-                  <Avatar nome={c.nome} foto={c.foto} size={30}/>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:600,color:C.text}}>{c.nome}</div>
-                    <div style={{fontSize:11,color:C.textMuted}}>Nº {c.numero}</div>
-                  </div>
-                </div>
+                {c.nome
+                  ? <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <Avatar nome={c.nome} foto={c.foto} size={30}/>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:600,color:C.text}}>{c.nome}</div>
+                        <div style={{fontSize:11,color:C.textMuted}}>Nº {c.numero}</div>
+                      </div>
+                    </div>
+                  : <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{width:30,height:30,borderRadius:'50%',background:C.surface2,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                        <Icon name="users" size={15} color={C.textMuted}/>
+                      </div>
+                      <div style={{fontSize:13,fontStyle:'italic',color:C.textSub}}>Visitantes</div>
+                    </div>
+                }
+                <div style={{fontSize:12,color:C.textMuted,fontFamily:'monospace'}}>×{c.quantidade}</div>
                 <div style={{fontSize:12,color:C.textSub}}>{fmtS(c.data)}</div>
                 <div style={{fontSize:13,color:C.textSub}}>{c.tipo === 'A' ? '🌞 Almoço' : '🌙 Jantar'}</div>
                 <PratoTag label={c.pratoLabel}/>
-                <div style={{fontSize:12,color:C.textMuted,fontFamily:'monospace'}}>{fmtHM(c.validado_em)}</div>
+                <div style={{fontSize:12,color:C.textMuted,fontFamily:'monospace'}}>{fmtHM(c.ts)}</div>
               </div>
             ))
           }

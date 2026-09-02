@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
+import { insertVisitantes } from '../../lib/queries'
 import { C } from '../../constants/colors'
 import { DEFAULTS } from '../../constants/settings'
 import { getMeal, getNextMeal, toMin } from '../../utils/meal'
@@ -10,6 +11,7 @@ import Icon from '../../components/Icon'
 import Logo from '../../components/Logo'
 import LoginShell, { ARR } from '../../components/LoginShell'
 import PratoTag from '../../components/PratoTag'
+import PratoBtn from '../../components/PratoBtn'
 import useSerial from '../../hooks/useSerial'
 
 // Cores específicas dos takeovers deste ecrã — não são tokens globais
@@ -41,6 +43,9 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   const [recentes,   setRecentes]   = useState([])
   const [contadores, setContadores] = useState([])
   const [manualMode, setManualMode] = useState(false)
+  const [visitorMode, setVisitorMode] = useState(false)
+  const [visitorPrato,setVisitorPrato] = useState(null)
+  const [visitorQtd,  setVisitorQtd]   = useState(1)
   const [tick,       setTick]       = useState(0)   // força re-render a cada 30s
 
   // Relógio: reavalia getMeal() periodicamente
@@ -97,6 +102,19 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     loadContadores(ementa)
     setStatus({type:'ok',func,pratoLabel,pratoDesc})
     setTimeout(reset,5000)
+  }
+
+  const cancelVisitorMode = () => { setVisitorMode(false); setVisitorPrato(null); setVisitorQtd(1) }
+
+  const confirmarVisitantes = async () => {
+    if(!visitorPrato || !ementaAtual) return
+    const qtd = visitorQtd
+    const {error} = await insertVisitantes(ementaAtual.id, visitorPrato, qtd)
+    if(error) return
+    const pk = `prato${visitorPrato}`
+    cancelVisitorMode()
+    setStatus({type:'visitor-ok',qtd,pratoLabel:ementaAtual[pk+'_label'],pratoDesc:ementaAtual[pk+'_desc']})
+    setTimeout(reset,3000)
   }
 
   const process = useCallback(async (val,isRfid=false) => {
@@ -170,11 +188,11 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   const mealTag = meal ? (meal==='A'?'🌞 Almoço':'🌙 Jantar') : null
 
   const bg = !meal || !status ? V.standby
-    : status.type==='ok'      ? V.ok
+    : status.type==='ok' || status.type==='visitor-ok' ? V.ok
     : status.type==='dup'     ? V.dup
     : status.type==='no-marc' ? V.no
     : C.bg
-  const glow = status?.type==='ok'  ? 'radial-gradient(circle at 70% 30%, rgba(52,211,153,0.32) 0%, transparent 60%)'
+  const glow = (status?.type==='ok' || status?.type==='visitor-ok') ? 'radial-gradient(circle at 70% 30%, rgba(52,211,153,0.32) 0%, transparent 60%)'
     : status?.type==='dup'          ? 'radial-gradient(circle at 30% 30%, rgba(251,191,36,0.28) 0%, transparent 60%)'
     : status?.type==='no-marc'      ? 'radial-gradient(circle at 70% 30%, rgba(248,113,113,0.26) 0%, transparent 60%)'
     : null
@@ -182,7 +200,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
 
   const renderTop = () => {
     if (status) {
-      const tint = status.type==='ok' ? 'rgba(232,249,236,0.6)' : status.type==='dup' ? 'rgba(254,243,199,0.65)' : status.type==='no-marc' ? 'rgba(254,226,226,0.6)' : C.textMuted
+      const tint = (status.type==='ok'||status.type==='visitor-ok') ? 'rgba(232,249,236,0.6)' : status.type==='dup' ? 'rgba(254,243,199,0.65)' : status.type==='no-marc' ? 'rgba(254,226,226,0.6)' : C.textMuted
       return (
         <div style={{height:46,padding:'0 28px',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0,position:'relative',zIndex:1,color:tint,fontSize:12}}>
           <Logo size="sm" showSub={false}/>
@@ -258,30 +276,42 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
       </div>
     )
 
-    // Sucesso — takeover verde
-    if(status?.type==='ok') return (
-      <div style={{flex:1,display:'flex',alignItems:'center',padding:'20px 56px 36px',gap:48,position:'relative',zIndex:1}}>
-        <Pessoa func={status.func} ring="rgba(52,211,153,0.6)" metaColor="rgba(232,249,236,0.6)"/>
-        <div style={{flex:1,display:'flex',flexDirection:'column',gap:24}}>
-          <div style={{display:'flex',alignItems:'center',gap:22}}>
-            <div style={{width:132,height:132,borderRadius:'50%',background:'#34d399',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 0 0 16px rgba(52,211,153,0.18), 0 24px 64px rgba(0,0,0,0.4)',flexShrink:0}}>
-              <Icon name="check" size={76} color={V.ok}/>
+    // Sucesso — takeover verde (consumo de funcionário ou visitante)
+    if(status?.type==='ok' || status?.type==='visitor-ok') {
+      const isVisitor = status.type==='visitor-ok'
+      const titulo = isVisitor ? `${status.qtd} VISITANTE${status.qtd>1?'S':''} REGISTADO${status.qtd>1?'S':''}` : 'CONSUMO REGISTADO'
+      return (
+        <div style={{flex:1,display:'flex',alignItems:'center',padding:'20px 56px 36px',gap:48,position:'relative',zIndex:1}}>
+          {isVisitor
+            ? <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:20,flexShrink:0,width:360}}>
+                <div style={{width:220,height:220,borderRadius:'50%',background:'rgba(52,211,153,0.16)',border:'1.5px solid rgba(52,211,153,0.5)',display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <Icon name="users" size={104} color="#34d399"/>
+                </div>
+                <div style={{fontSize:56,lineHeight:1,color:'#fff'}}>Visitantes</div>
+              </div>
+            : <Pessoa func={status.func} ring="rgba(52,211,153,0.6)" metaColor="rgba(232,249,236,0.6)"/>
+          }
+          <div style={{flex:1,display:'flex',flexDirection:'column',gap:24}}>
+            <div style={{display:'flex',alignItems:'center',gap:22}}>
+              <div style={{width:132,height:132,borderRadius:'50%',background:'#34d399',display:'flex',alignItems:'center',justifyContent:'center',boxShadow:'0 0 0 16px rgba(52,211,153,0.18), 0 24px 64px rgba(0,0,0,0.4)',flexShrink:0}}>
+                <Icon name="check" size={76} color={V.ok}/>
+              </div>
+              <div>
+                <div style={{fontSize:13,color:'rgba(232,249,236,0.65)',letterSpacing:'0.16em',fontWeight:700,marginBottom:6}}>{titulo}</div>
+                <div style={{fontSize:96,lineHeight:0.9,color:'#fff'}}>Bom apetite.</div>
+              </div>
             </div>
-            <div>
-              <div style={{fontSize:13,color:'rgba(232,249,236,0.65)',letterSpacing:'0.16em',fontWeight:700,marginBottom:6}}>CONSUMO REGISTADO</div>
-              <div style={{fontSize:96,lineHeight:0.9,color:'#fff'}}>Bom apetite.</div>
+            <div style={{background:V.okCard,border:'1px solid rgba(52,211,153,0.3)',borderRadius:22,padding:'24px 28px',marginTop:6}}>
+              <div style={{display:'flex',alignItems:'center',gap:18,marginBottom:6}}>
+                <PratoTag label={status.pratoLabel} large/>
+                <span style={{fontSize:13,color:'rgba(232,249,236,0.5)',letterSpacing:'0.14em',fontWeight:700}}>· {isVisitor?'PRATO':'O TEU PRATO'}</span>
+              </div>
+              <div style={{fontSize:42,lineHeight:1.1,color:'#fff',marginTop:8}}>{status.pratoDesc}</div>
             </div>
-          </div>
-          <div style={{background:V.okCard,border:'1px solid rgba(52,211,153,0.3)',borderRadius:22,padding:'24px 28px',marginTop:6}}>
-            <div style={{display:'flex',alignItems:'center',gap:18,marginBottom:6}}>
-              <PratoTag label={status.pratoLabel} large/>
-              <span style={{fontSize:13,color:'rgba(232,249,236,0.5)',letterSpacing:'0.14em',fontWeight:700}}>· O TEU PRATO</span>
-            </div>
-            <div style={{fontSize:42,lineHeight:1.1,color:'#fff',marginTop:8}}>{status.pratoDesc}</div>
           </div>
         </div>
-      </div>
-    )
+      )
+    }
 
     // Duplicado — takeover âmbar
     if(status?.type==='dup') {
@@ -351,6 +381,45 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
       </div>
     )
 
+    // Visitantes — seleção de prato + quantidade
+    if(visitorMode) return (
+      <div style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',position:'relative',zIndex:1,padding:'20px 56px'}}>
+        <div style={{width:'100%',maxWidth:640,background:V.panel,border:`1px solid ${C.border}`,borderRadius:24,padding:'32px 36px',display:'flex',flexDirection:'column',gap:22}}>
+          <div>
+            <div style={{fontSize:12,fontWeight:700,color:C.textMuted,letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:6}}>Visitantes{mealTag?` · ${mealTag}`:''}</div>
+            <div style={{fontSize:40,lineHeight:1,color:C.text}}>Registar consumo</div>
+          </div>
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {[1,2,3,4].map(n => {
+              const label = ementaAtual?.[`prato${n}_label`]
+              const desc  = ementaAtual?.[`prato${n}_desc`]
+              if(!label) return null
+              return <PratoBtn key={n} label={label} desc={desc} selected={visitorPrato===n} onClick={()=>setVisitorPrato(n)}/>
+            })}
+          </div>
+          {visitorPrato && (
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:28,padding:'18px 0'}}>
+              <button onClick={()=>setVisitorQtd(q=>Math.max(1,q-1))}
+                style={{width:64,height:64,borderRadius:16,background:C.surface2,border:`1px solid ${C.border}`,color:C.text,fontSize:32,fontWeight:700,cursor:'pointer'}}>−</button>
+              <div style={{fontSize:56,fontWeight:900,color:C.yellow,minWidth:80,textAlign:'center'}}>{visitorQtd}</div>
+              <button onClick={()=>setVisitorQtd(q=>Math.min(50,q+1))}
+                style={{width:64,height:64,borderRadius:16,background:C.surface2,border:`1px solid ${C.border}`,color:C.text,fontSize:32,fontWeight:700,cursor:'pointer'}}>+</button>
+            </div>
+          )}
+          <div style={{display:'flex',gap:12,marginTop:4}}>
+            <button onClick={cancelVisitorMode}
+              style={{flex:1,height:52,background:'transparent',border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,fontSize:15,fontWeight:600,cursor:'pointer'}}>
+              Cancelar
+            </button>
+            <button disabled={!visitorPrato || !ementaAtual} onClick={confirmarVisitantes}
+              style={{flex:2,height:52,background:visitorPrato?C.yellow:C.surface2,border:'none',borderRadius:12,color:visitorPrato?C.bg:C.textMuted,fontSize:15,fontWeight:700,cursor:visitorPrato?'pointer':'default'}}>
+              Confirmar
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+
     // Standby — hero + últimas validações
     return (
       <div style={{flex:1,display:'flex',minHeight:0,position:'relative',zIndex:1}}>
@@ -370,6 +439,12 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
               onMouseEnter={e=>{e.currentTarget.style.borderColor=`${C.yellow}55`;e.currentTarget.style.color=C.text}}
               onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textSub}}>
               Introduzir código manualmente
+            </button>
+            <button onClick={()=>setVisitorMode(true)}
+              style={{marginTop:12,height:54,padding:'0 30px',background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,color:C.textMuted,fontSize:15,fontWeight:600,cursor:'pointer',display:'inline-flex',alignItems:'center',gap:10,transition:'border-color 0.15s'}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor=`${C.yellow}55`;e.currentTarget.style.color=C.text}}
+              onMouseLeave={e=>{e.currentTarget.style.borderColor=C.border;e.currentTarget.style.color=C.textMuted}}>
+              Registar visitante(s)
             </button>
           </div>
         </div>
