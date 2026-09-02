@@ -111,9 +111,10 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     const qtd = visitorQtd
     const {error} = await insertVisitantes(ementaAtual.id, visitorPrato, qtd)
     if(error) return
-    const pk = `prato${visitorPrato}`
+    const pk=`prato${visitorPrato}`,pratoLabel=ementaAtual[pk+'_label'],pratoDesc=ementaAtual[pk+'_desc']
+    setRecentes(p=>[{id:`v-${Date.now()}`,validado_em:new Date().toISOString(),nome:'Visitante(s)',foto:null,quantidade:qtd,isVisitante:true,pratoLabel,pratoDesc},...p].slice(0,5))
     cancelVisitorMode()
-    setStatus({type:'visitor-ok',qtd,pratoLabel:ementaAtual[pk+'_label'],pratoDesc:ementaAtual[pk+'_desc']})
+    setStatus({type:'visitor-ok',qtd,pratoLabel,pratoDesc})
     setTimeout(reset,3000)
   }
 
@@ -459,9 +460,17 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
               const p = ps(r.pratoLabel)
               return (
                 <div key={r.id} style={{padding:'12px 20px',borderBottom:`1px solid ${p.border}`,display:'flex',alignItems:'center',gap:12,background:p.bg,outline:i===0?`1.5px solid ${p.border}`:'none',outlineOffset:'-1.5px'}}>
-                  <Avatar nome={r.nome} foto={r.foto} size={36}/>
+                  {r.isVisitante
+                    ? <div style={{width:36,height:36,borderRadius:'50%',background:C.surface2,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+                        <Icon name="users" size={18} color={C.textMuted}/>
+                      </div>
+                    : <Avatar nome={r.nome} foto={r.foto} size={36}/>
+                  }
                   <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.nome}</div>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',display:'flex',alignItems:'center',gap:6}}>
+                      {r.isVisitante ? 'Visitantes' : r.nome}
+                      {r.isVisitante && <span style={{fontSize:11,fontWeight:800,color:C.yellow}}>×{r.quantidade}</span>}
+                    </div>
                     <div style={{fontSize:11,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                       <span style={{color:p.color,fontWeight:600}}>{r.pratoLabel}</span>
                       <span style={{color:C.textMuted}}> · {fmtHM(r.validado_em)}</span>
