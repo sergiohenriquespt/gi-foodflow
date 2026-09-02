@@ -28,3 +28,11 @@ export const fetchVisitantes = async () => {
   const { data } = await supabase.from('cantina_visitantes').select('*').order('registado_em', { ascending: false })
   return data || []
 }
+
+export const fetchRecentesEmenta = async (ementa_id, limit) => {
+  const [{data:consumos},{data:visitantes}] = await Promise.all([
+    supabase.from('cantina_consumos').select('*').eq('ementa_id',ementa_id).order('validado_em',{ascending:false}).limit(limit),
+    supabase.from('cantina_visitantes').select('*').eq('ementa_id',ementa_id).order('registado_em',{ascending:false}).limit(limit),
+  ])
+  return {consumos:consumos||[], visitantes:visitantes||[]}
+}

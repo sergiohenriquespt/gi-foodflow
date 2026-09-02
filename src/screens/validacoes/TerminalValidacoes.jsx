@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
-import { insertVisitantes } from '../../lib/queries'
+import { insertVisitantes, fetchRecentesEmenta } from '../../lib/queries'
 import { C } from '../../constants/colors'
 import { DEFAULTS } from '../../constants/settings'
 import { getMeal, getNextMeal, toMin } from '../../utils/meal'
@@ -83,13 +83,20 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
 
   const loadRecentes = async em => {
     if(!em) return
-    const {data} = await supabase.from('cantina_consumos').select('*').eq('ementa_id',em.id).order('validado_em',{ascending:false}).limit(5)
-    if(!data) return
-    setRecentes(data.map(c => {
-      const f = funcionarios.find(f=>f.id===c.funcionario_id)
-      const pk = `prato${c.prato_num}`
-      return {id:c.id,validado_em:c.validado_em,nome:f?.nome||'—',foto:f?.foto,pratoLabel:em[pk+'_label'],pratoDesc:em[pk+'_desc']}
-    }))
+    const limit = parseInt(s.validacao_sidebar_num) || 10
+    const {consumos,visitantes:vis} = await fetchRecentesEmenta(em.id,limit)
+    const rows = [
+      ...consumos.map(c => {
+        const f = funcionarios.find(f=>f.id===c.funcionario_id)
+        const pk = `prato${c.prato_num}`
+        return {id:c.id,validado_em:c.validado_em,nome:f?.nome||'—',foto:f?.foto,pratoLabel:em[pk+'_label'],pratoDesc:em[pk+'_desc']}
+      }),
+      ...vis.map(v => {
+        const pk = `prato${v.prato_num}`
+        return {id:`v-${v.id}`,validado_em:v.registado_em,nome:'Visitante(s)',foto:null,quantidade:v.quantidade,isVisitante:true,pratoLabel:em[pk+'_label'],pratoDesc:em[pk+'_desc']}
+      }),
+    ].sort((a,b)=>new Date(b.validado_em)-new Date(a.validado_em)).slice(0,limit)
+    setRecentes(rows)
   }
 
   useEffect(() => { loadContadores(ementaAtual); loadRecentes(ementaAtual) }, [ementaAtual?.id])
@@ -98,7 +105,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     const {data,error} = await supabase.from('cantina_consumos').insert({funcionario_id:func.id,ementa_id:ementa.id,prato_num:pratoNum}).select().single()
     if(error) return
     const pk=`prato${pratoNum}`,pratoLabel=ementa[pk+'_label'],pratoDesc=ementa[pk+'_desc']
-    setRecentes(p=>[{id:data.id,validado_em:data.validado_em,nome:func.nome,foto:func.foto,pratoLabel,pratoDesc},...p].slice(0,5))
+    setRecentes(p=>[{id:data.id,validado_em:data.validado_em,nome:func.nome,foto:func.foto,pratoLabel,pratoDesc},...p].slice(0,parseInt(s.validacao_sidebar_num)||10))
     loadContadores(ementa)
     setStatus({type:'ok',func,pratoLabel,pratoDesc})
     setTimeout(reset,parseInt(s.validacao_tempo_ok)*1000)
@@ -112,7 +119,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     const {error} = await insertVisitantes(ementaAtual.id, visitorPrato, qtd)
     if(error) return
     const pk=`prato${visitorPrato}`,pratoLabel=ementaAtual[pk+'_label'],pratoDesc=ementaAtual[pk+'_desc']
-    setRecentes(p=>[{id:`v-${Date.now()}`,validado_em:new Date().toISOString(),nome:'Visitante(s)',foto:null,quantidade:qtd,isVisitante:true,pratoLabel,pratoDesc},...p].slice(0,5))
+    setRecentes(p=>[{id:`v-${Date.now()}`,validado_em:new Date().toISOString(),nome:'Visitante(s)',foto:null,quantidade:qtd,isVisitante:true,pratoLabel,pratoDesc},...p].slice(0,parseInt(s.validacao_sidebar_num)||10))
     cancelVisitorMode()
     setStatus({type:'visitor-ok',qtd,pratoLabel,pratoDesc})
     setTimeout(reset,3000)

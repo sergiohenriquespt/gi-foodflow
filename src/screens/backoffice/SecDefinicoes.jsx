@@ -101,7 +101,7 @@ export default function SecDefinicoes({settings, reload}) {
         </SettingsCard>
 
         <SettingsCard eyebrow="⏱ Tempos de ecrã — Validações">
-          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14}}>
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:14, marginBottom:14}}>
             <div>
               <label style={lS}>Consumo registado</label>
               <div style={{display:'flex', alignItems:'center', gap:8}}>
@@ -115,6 +115,10 @@ export default function SecDefinicoes({settings, reload}) {
                 <input type="number" min="2" max="30" value={form.validacao_tempo_dup} onChange={e => set('validacao_tempo_dup', e.target.value)} style={{...iS,width:80}}/>
                 <span style={{fontSize:12,color:C.textMuted}}>segundos</span>
               </div>
+            </div>
+            <div>
+              <label style={lS}>Últimas validações visíveis</label>
+              <input type="number" min="3" max="20" value={form.validacao_sidebar_num} onChange={e => set('validacao_sidebar_num', e.target.value)} style={iS}/>
             </div>
           </div>
           <div style={{fontSize:12, color:C.textMuted, background:C.surface2, borderRadius:8, padding:'9px 14px'}}>
