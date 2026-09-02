@@ -7,8 +7,17 @@ import Icon from '../../components/Icon'
 
 const EYE  = {fontSize:11,fontWeight:700,color:'#64748b',letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:2}
 const BIG  = {fontStyle:'italic',fontSize:26,color:'#e2e8f0',lineHeight:1}
-const COLS = '1fr 60px 120px 95px 105px 72px'
+const COLS = '1fr 120px 95px 105px 60px 72px'
 const TH   = {fontSize:11,fontWeight:700,color:'#64748b',textTransform:'uppercase',letterSpacing:'0.1em'}
+
+function StatCard({label, value}) {
+  return (
+    <div style={{flex:1,minWidth:100,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,padding:'10px 16px'}}>
+      <div style={EYE}>{label}</div>
+      <div style={BIG}>{value}</div>
+    </div>
+  )
+}
 
 export default function SecConsumos({consumos, visitantes=[], funcionarios, ementas}) {
   const [fStart, setFStart] = useState(FIRST_MONTH())
@@ -47,11 +56,15 @@ export default function SecConsumos({consumos, visitantes=[], funcionarios, emen
     ...filteredVisitantes.map(v => ({key:`v-${v.id}`, ts:v.registado_em, data:v.data, tipo:v.tipo, pratoLabel:v.pratoLabel, quantidade:v.quantidade})),
   ].sort((a, b) => new Date(b.ts) - new Date(a.ts))
 
+  const visQtd  = tipo => filteredVisitantes.filter(v => !tipo || v.tipo === tipo).reduce((s,v)=>s+v.quantidade,0)
+  const funcQtd = tipo => filtered.filter(c => !tipo || c.tipo === tipo).length
+
   const stats = {
-    total: filtered.length,
-    a: filtered.filter(c=>c.tipo==='A').length,
-    j: filtered.filter(c=>c.tipo==='J').length,
-    visitantes: filteredVisitantes.reduce((s,v)=>s+v.quantidade,0),
+    total: funcQtd() + visQtd(),
+    a: funcQtd('A') + visQtd('A'),
+    j: funcQtd('J') + visQtd('J'),
+    funcionarios: funcQtd(),
+    visitantes: visQtd(),
   }
 
   const pill = {height:34,padding:'0 14px',background:C.surface,border:`1px solid ${C.border}`,borderRadius:99,color:C.text,fontSize:12,outline:'none',cursor:'pointer'}
@@ -60,28 +73,18 @@ export default function SecConsumos({consumos, visitantes=[], funcionarios, emen
     <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
 
       {/* ── Toolbar ── */}
-      <div style={{padding:'14px 32px',display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+      <div style={{padding:'14px 32px',display:'flex',alignItems:'flex-start',justifyContent:'space-between',gap:24,borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
 
         {/* Stats */}
-        <div style={{display:'flex',alignItems:'center',gap:24}}>
-          <div>
-            <div style={EYE}>Consumos</div>
-            <div style={BIG}>{stats.total}</div>
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          <div style={{display:'flex',gap:8}}>
+            <StatCard label="Total" value={stats.total}/>
+            <StatCard label="🌞 Almoços" value={stats.a}/>
+            <StatCard label="🌙 Jantares" value={stats.j}/>
           </div>
-          <div style={{width:1,height:28,background:C.border}}/>
-          <div style={{display:'flex',alignItems:'center',gap:12,fontSize:12,color:C.textSub}}>
-            <span style={{display:'inline-flex',alignItems:'center',gap:5}}>
-              🌞 <strong style={{color:C.text}}>{stats.a}</strong> almoços
-            </span>
-            <div style={{width:1,height:14,background:C.border}}/>
-            <span style={{display:'inline-flex',alignItems:'center',gap:5}}>
-              🌙 <strong style={{color:C.text}}>{stats.j}</strong> jantares
-            </span>
-          </div>
-          <div style={{width:1,height:28,background:C.border}}/>
-          <div>
-            <div style={EYE}>Visitantes</div>
-            <div style={BIG}>{stats.visitantes}</div>
+          <div style={{display:'flex',gap:8}}>
+            <StatCard label="Funcionários" value={stats.funcionarios}/>
+            <StatCard label="Visitantes" value={stats.visitantes}/>
           </div>
         </div>
 
@@ -113,7 +116,7 @@ export default function SecConsumos({consumos, visitantes=[], funcionarios, emen
 
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:COLS,padding:'10px 18px',gap:14,background:C.surface2,borderBottom:`1px solid ${C.border}`,alignItems:'center'}}>
-            {['Funcionário','Qtd','Data','Refeição','Prato','Hora'].map(h => (
+            {['Funcionário','Data','Refeição','Prato','Qtd','Hora'].map(h => (
               <div key={h} style={TH}>{h}</div>
             ))}
           </div>
@@ -140,13 +143,13 @@ export default function SecConsumos({consumos, visitantes=[], funcionarios, emen
                       <div style={{width:30,height:30,borderRadius:'50%',background:C.surface2,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                         <Icon name="users" size={15} color={C.textMuted}/>
                       </div>
-                      <div style={{fontSize:13,fontStyle:'italic',color:C.textSub}}>Visitantes</div>
+                      <div style={{fontSize:13,fontStyle:'italic',color:C.textSub}}>Visitante(s)</div>
                     </div>
                 }
-                <div style={{fontSize:12,color:C.textMuted,fontFamily:'monospace'}}>×{c.quantidade}</div>
                 <div style={{fontSize:12,color:C.textSub}}>{fmtS(c.data)}</div>
                 <div style={{fontSize:13,color:C.textSub}}>{c.tipo === 'A' ? '🌞 Almoço' : '🌙 Jantar'}</div>
                 <PratoTag label={c.pratoLabel}/>
+                <div style={{fontSize:c.nome?12:15,fontWeight:c.nome?400:800,color:c.nome?C.textMuted:C.yellow,fontFamily:c.nome?'monospace':'inherit'}}>{c.quantidade}</div>
                 <div style={{fontSize:12,color:C.textMuted,fontFamily:'monospace'}}>{fmtHM(c.ts)}</div>
               </div>
             ))
