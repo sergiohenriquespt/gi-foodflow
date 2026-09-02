@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchFuncionarios, fetchEmentas, fetchMarcacoesAll, fetchConsumos, fetchDefinicoes } from './lib/queries'
+import { fetchFuncionarios, fetchEmentas, fetchMarcacoesAll, fetchConsumos, fetchDefinicoes, fetchVisitantes } from './lib/queries'
 import { DEFAULTS } from './constants/settings'
 import { C } from './constants/colors'
 import LoadingScreen from './components/LoadingScreen'
@@ -22,13 +22,14 @@ export default function App() {
   const [ementas,      setEmentas]      = useState([])
   const [marcacoesAll, setMarcacoesAll] = useState([])
   const [consumos,     setConsumos]     = useState([])
+  const [visitantes,   setVisitantes]   = useState([])
   const [settings,     setSettings]     = useState(DEFAULTS)
 
   const reload = useCallback(async () => {
     try {
       setLoadErr(null)
-      const [f,e,m,c,def] = await Promise.all([fetchFuncionarios(),fetchEmentas(),fetchMarcacoesAll(),fetchConsumos(),fetchDefinicoes()])
-      setFuncionarios(f); setEmentas(e); setMarcacoesAll(m); setConsumos(c); setSettings(def)
+      const [f,e,m,c,v,def] = await Promise.all([fetchFuncionarios(),fetchEmentas(),fetchMarcacoesAll(),fetchConsumos(),fetchVisitantes(),fetchDefinicoes()])
+      setFuncionarios(f); setEmentas(e); setMarcacoesAll(m); setConsumos(c); setVisitantes(v); setSettings(def)
     } catch(_) { setLoadErr('Erro ao carregar dados.') }
   }, [])
 
@@ -57,5 +58,5 @@ export default function App() {
   if (mode==='selector')   return <ModeSelector onSelect={setMode}/>
   if (mode==='marcacoes')  return <><ErrBar/><TerminalMarcacoes  {...shared} onBack={()=>setMode('selector')}/></>
   if (mode==='validacoes') return <><ErrBar/><TerminalValidacoes {...shared} onBack={()=>setMode('selector')}/></>
-  if (mode==='backoffice') return <><ErrBar/><Backoffice {...shared} marcacoesAll={marcacoesAll} consumos={consumos} reload={reload} onBack={()=>setMode('selector')}/></>
+  if (mode==='backoffice') return <><ErrBar/><Backoffice {...shared} marcacoesAll={marcacoesAll} consumos={consumos} visitantes={visitantes} reload={reload} onBack={()=>setMode('selector')}/></>
 }
