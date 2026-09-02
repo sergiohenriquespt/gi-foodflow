@@ -359,6 +359,10 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
               <div style={{fontSize:56,lineHeight:0.95,color:'#fff'}}>Sem marcação.</div>
             </div>
           </div>
+          <button onClick={reset}
+            style={{width:'100%',minHeight:56,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,fontSize:15,fontWeight:600,cursor:'pointer'}}>
+            Cancelar
+          </button>
           <div style={{background:V.noCard,border:'1px solid rgba(248,113,113,0.22)',borderRadius:20,padding:'18px 20px'}}>
             <div style={{fontSize:11,fontWeight:700,color:'rgba(254,226,226,0.65)',letterSpacing:'0.14em',textTransform:'uppercase',marginBottom:12}}>Escolhe o prato a servir</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
@@ -376,7 +380,6 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
               })}
             </div>
           </div>
-          <button onClick={reset} style={{alignSelf:'flex-start',background:'none',border:'none',color:'rgba(254,226,226,0.5)',fontSize:13,textDecoration:'underline',cursor:'pointer',padding:0}}>Cancelar</button>
         </div>
       </div>
     )
