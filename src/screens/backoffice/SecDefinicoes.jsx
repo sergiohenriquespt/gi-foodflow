@@ -100,6 +100,28 @@ export default function SecDefinicoes({settings, reload}) {
           </div>
         </SettingsCard>
 
+        <SettingsCard eyebrow="⏱ Tempos de ecrã — Validações">
+          <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:14}}>
+            <div>
+              <label style={lS}>Consumo registado</label>
+              <div style={{display:'flex', alignItems:'center', gap:8}}>
+                <input type="number" min="2" max="30" value={form.validacao_tempo_ok} onChange={e => set('validacao_tempo_ok', e.target.value)} style={{...iS,width:80}}/>
+                <span style={{fontSize:12,color:C.textMuted}}>segundos</span>
+              </div>
+            </div>
+            <div>
+              <label style={lS}>Refeição duplicada</label>
+              <div style={{display:'flex', alignItems:'center', gap:8}}>
+                <input type="number" min="2" max="30" value={form.validacao_tempo_dup} onChange={e => set('validacao_tempo_dup', e.target.value)} style={{...iS,width:80}}/>
+                <span style={{fontSize:12,color:C.textMuted}}>segundos</span>
+              </div>
+            </div>
+          </div>
+          <div style={{fontSize:12, color:C.textMuted, background:C.surface2, borderRadius:8, padding:'9px 14px'}}>
+            Segundos que o terminal de validações mostra cada resultado antes de voltar ao ecrã inicial.
+          </div>
+        </SettingsCard>
+
         <SettingsCard eyebrow="Regras de marcação">
           {toggles.map(({k, label, desc}, i) => (
             <div key={k} style={{

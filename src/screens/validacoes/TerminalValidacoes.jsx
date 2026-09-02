@@ -101,7 +101,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     setRecentes(p=>[{id:data.id,validado_em:data.validado_em,nome:func.nome,foto:func.foto,pratoLabel,pratoDesc},...p].slice(0,5))
     loadContadores(ementa)
     setStatus({type:'ok',func,pratoLabel,pratoDesc})
-    setTimeout(reset,5000)
+    setTimeout(reset,parseInt(s.validacao_tempo_ok)*1000)
   }
 
   const cancelVisitorMode = () => { setVisitorMode(false); setVisitorPrato(null); setVisitorQtd(1) }
@@ -131,7 +131,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     const ementa = ementas.find(e=>e.data===TODAY&&e.tipo===currentMeal)
     if(!ementa){setStatus({type:'error',msg:'Sem ementa para este momento'});setTimeout(reset,3000);return}
     const{data:exC}=await supabase.from('cantina_consumos').select('prato_num,validado_em').eq('funcionario_id',func.id).eq('ementa_id',ementa.id).maybeSingle()
-    if(exC){const pk=`prato${exC.prato_num}`;setStatus({type:'dup',func,pratoLabel:ementa[pk+'_label'],pratoDesc:ementa[pk+'_desc'],validadoEm:exC.validado_em});setTimeout(reset,6000);return}
+    if(exC){const pk=`prato${exC.prato_num}`;setStatus({type:'dup',func,pratoLabel:ementa[pk+'_label'],pratoDesc:ementa[pk+'_desc'],validadoEm:exC.validado_em});setTimeout(reset,parseInt(s.validacao_tempo_dup)*1000);return}
     const{data:marc}=await supabase.from('cantina_marcacoes').select('prato_num').eq('funcionario_id',func.id).eq('ementa_id',ementa.id).maybeSingle()
     if(!marc){setStatus({type:'no-marc',func,ementa});return}
     confirmarConsumo(func,ementa,marc.prato_num)
