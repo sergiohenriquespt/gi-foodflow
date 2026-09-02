@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { DEFAULTS } from '../constants/settings'
+import { addD } from '../utils/date'
 
 const mapFunc = r => ({...r, foto:r.foto_url})
 
@@ -29,10 +30,22 @@ export const fetchVisitantes = async () => {
   return data || []
 }
 
-export const fetchRecentesEmenta = async (ementa_id, limit) => {
-  const [{data:consumos},{data:visitantes}] = await Promise.all([
-    supabase.from('cantina_consumos').select('*').eq('ementa_id',ementa_id).order('validado_em',{ascending:false}).limit(limit),
-    supabase.from('cantina_visitantes').select('*').eq('ementa_id',ementa_id).order('registado_em',{ascending:false}).limit(limit),
-  ])
-  return {consumos:consumos||[], visitantes:visitantes||[]}
+export const fetchConsumosPorData = async (data, limit) => {
+  const { data:rows } = await supabase.from('cantina_consumos')
+    .select('*')
+    .gte('validado_em', `${data}T00:00:00`)
+    .lt('validado_em', `${addD(data,1)}T00:00:00`)
+    .order('validado_em', { ascending:false })
+    .limit(limit)
+  return rows || []
+}
+
+export const fetchVisitantesPorData = async (data, limit) => {
+  const { data:rows } = await supabase.from('cantina_visitantes')
+    .select('*')
+    .gte('registado_em', `${data}T00:00:00`)
+    .lt('registado_em', `${addD(data,1)}T00:00:00`)
+    .order('registado_em', { ascending:false })
+    .limit(limit)
+  return rows || []
 }

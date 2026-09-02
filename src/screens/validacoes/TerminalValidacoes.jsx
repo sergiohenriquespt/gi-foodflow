@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
-import { insertVisitantes, fetchRecentesEmenta } from '../../lib/queries'
+import { insertVisitantes, fetchConsumosPorData, fetchVisitantesPorData } from '../../lib/queries'
 import { C } from '../../constants/colors'
 import { DEFAULTS } from '../../constants/settings'
 import { getMeal, getNextMeal, toMin } from '../../utils/meal'
@@ -81,25 +81,30 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     }).filter(Boolean))
   }
 
-  const loadRecentes = async em => {
-    if(!em) return
+  const loadRecentes = async () => {
     const limit = parseInt(s.validacao_sidebar_num) || 10
-    const {consumos,visitantes:vis} = await fetchRecentesEmenta(em.id,limit)
+    const [consumos,vis] = await Promise.all([
+      fetchConsumosPorData(TODAY,limit),
+      fetchVisitantesPorData(TODAY,limit),
+    ])
     const rows = [
       ...consumos.map(c => {
-        const f = funcionarios.find(f=>f.id===c.funcionario_id)
+        const f  = funcionarios.find(f=>f.id===c.funcionario_id)
+        const em = ementas.find(e=>e.id===c.ementa_id)
         const pk = `prato${c.prato_num}`
-        return {id:c.id,validado_em:c.validado_em,nome:f?.nome||'—',foto:f?.foto,pratoLabel:em[pk+'_label'],pratoDesc:em[pk+'_desc']}
+        return {id:c.id,validado_em:c.validado_em,nome:f?.nome||'—',foto:f?.foto,pratoLabel:em?.[pk+'_label'],pratoDesc:em?.[pk+'_desc']}
       }),
       ...vis.map(v => {
+        const em = ementas.find(e=>e.id===v.ementa_id)
         const pk = `prato${v.prato_num}`
-        return {id:`v-${v.id}`,validado_em:v.registado_em,nome:'Visitante(s)',foto:null,quantidade:v.quantidade,isVisitante:true,pratoLabel:em[pk+'_label'],pratoDesc:em[pk+'_desc']}
+        return {id:`v-${v.id}`,validado_em:v.registado_em,nome:'Visitantes',foto:null,quantidade:v.quantidade,isVisitante:true,pratoLabel:em?.[pk+'_label'],pratoDesc:em?.[pk+'_desc']}
       }),
     ].sort((a,b)=>new Date(b.validado_em)-new Date(a.validado_em)).slice(0,limit)
     setRecentes(rows)
   }
 
-  useEffect(() => { loadContadores(ementaAtual); loadRecentes(ementaAtual) }, [ementaAtual?.id])
+  useEffect(() => { loadContadores(ementaAtual) }, [ementaAtual?.id])
+  useEffect(() => { loadRecentes() }, [])
 
   const confirmarConsumo = async (func,ementa,pratoNum) => {
     const {data,error} = await supabase.from('cantina_consumos').insert({funcionario_id:func.id,ementa_id:ementa.id,prato_num:pratoNum}).select().single()
