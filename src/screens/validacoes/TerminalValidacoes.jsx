@@ -5,7 +5,7 @@ import { C } from '../../constants/colors'
 import { DEFAULTS } from '../../constants/settings'
 import { getMeal, getNextMeal, toMin } from '../../utils/meal'
 import { fmtHM, fmtS, TODAY, WD, MN, addD } from '../../utils/date'
-import { ps } from '../../constants/pratos'
+import { ps, PRATO_PALETTE } from '../../constants/pratos'
 import Avatar from '../../components/Avatar'
 import Icon from '../../components/Icon'
 import Logo from '../../components/Logo'
@@ -160,6 +160,15 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     const agoraStr = `${String(agora.getDate()).padStart(2,'0')}/${String(agora.getMonth()+1).padStart(2,'0')}/${agora.getFullYear()} ${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')}`
     const esc = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
 
+    const pratoOrder = Object.keys(PRATO_PALETTE)
+    const contarTotais = rows => {
+      const counts = {}
+      rows.forEach(r => { counts[r.prato] = (counts[r.prato]||0)+1 })
+      const ordenados = pratoOrder.filter(l=>counts[l]>0).map(l=>[l,counts[l]])
+      const restantes  = Object.keys(counts).filter(l=>!pratoOrder.includes(l)).map(l=>[l,counts[l]])
+      return [...ordenados,...restantes]
+    }
+
     const rowsHtml = groups.map(g => `
       ${g.label ? `<div class="sub">${g.label} (${g.rows.length})</div>` : ''}
       <table>
@@ -167,6 +176,14 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
         ${g.rows.map(r=>`<tr><td>${esc(r.numero)}</td><td>${esc(r.nome)}</td><td>${esc(r.prato)}</td></tr>`).join('')}
       </table>
       <div class="total">Total: ${g.rows.length} marcaç${g.rows.length===1?'ão':'ões'}</div>
+    `).join('<div class="sep"></div>')
+
+    const totaisHtml = groups.map(g => `
+      <div class="sub">${g.label ? `TOTAIS — ${g.label}` : 'TOTAIS'}</div>
+      <div class="sep"></div>
+      <table class="totais">
+        ${contarTotais(g.rows).map(([label,count])=>`<tr><td>${esc(label)}</td><td class="num">${count}</td></tr>`).join('')}
+      </table>
     `).join('<div class="sep"></div>')
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Marcações</title><style>
@@ -180,6 +197,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
       th,td { text-align:left; padding:2px 0; vertical-align:top; }
       th:first-child,td:first-child { width:22px; }
       .total { font-weight:bold; margin-top:6px; }
+      table.totais td.num { text-align:right; font-weight:700; }
     </style></head><body>
       <div class="titulo">GI FOODFLOW</div>
       <div class="sep"></div>
@@ -187,7 +205,10 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
       <div>${periodoLabel} · ${refeicaoLabel}</div>
       <div class="sep"></div>
       ${rowsHtml}
-      ${groups.length>1 ? `<div class="sep"></div><div class="total">Total geral: ${enriched.length} marcações</div>` : ''}
+      <div class="sep"></div>
+      ${totaisHtml}
+      <div class="sep"></div>
+      <table class="totais"><tr><td><strong>TOTAL GERAL</strong></td><td class="num"><strong>${enriched.length}</strong></td></tr></table>
       <div class="sep"></div>
     </body></html>`
 
