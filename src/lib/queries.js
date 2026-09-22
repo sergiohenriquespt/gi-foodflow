@@ -49,3 +49,11 @@ export const fetchVisitantesPorData = async (data, limit) => {
     .limit(limit)
   return rows || []
 }
+
+export const fetchMarcacoesPorPeriodo = async (dataInicio, dataFim) => {
+  const { data:rows } = await supabase.from('cantina_marcacoes')
+    .select('funcionario_id,ementa_id,prato_num,cantina_ementas!inner(data,tipo)')
+    .gte('cantina_ementas.data', dataInicio)
+    .lte('cantina_ementas.data', dataFim)
+  return (rows||[]).map(r => ({funcionario_id:r.funcionario_id, ementa_id:r.ementa_id, prato_num:r.prato_num, data:r.cantina_ementas.data, tipo:r.cantina_ementas.tipo}))
+}

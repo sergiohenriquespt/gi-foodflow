@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
-import { insertVisitantes, fetchConsumosPorData, fetchVisitantesPorData } from '../../lib/queries'
+import { insertVisitantes, fetchConsumosPorData, fetchVisitantesPorData, fetchMarcacoesPorPeriodo } from '../../lib/queries'
 import { C } from '../../constants/colors'
 import { DEFAULTS } from '../../constants/settings'
 import { getMeal, getNextMeal, toMin } from '../../utils/meal'
-import { fmtHM, TODAY, WD, MN } from '../../utils/date'
+import { fmtHM, fmtS, TODAY, WD, MN, addD } from '../../utils/date'
 import { ps } from '../../constants/pratos'
 import Avatar from '../../components/Avatar'
 import Icon from '../../components/Icon'
@@ -47,6 +47,11 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   const [visitorPrato,setVisitorPrato] = useState(null)
   const [visitorQtd,  setVisitorQtd]   = useState(1)
   const [tick,       setTick]       = useState(0)   // força re-render a cada 30s
+  const [showMarc,    setShowMarc]    = useState(false)
+  const [marcPeriodo, setMarcPeriodo] = useState('amanha') // 'hoje' | 'amanha' | 'entre'
+  const [marcDe,       setMarcDe]     = useState(TODAY)
+  const [marcAte,      setMarcAte]    = useState(TODAY)
+  const [marcRefeicao, setMarcRefeicao] = useState('ambos') // 'A' | 'J' | 'ambos'
 
   // Relógio: reavalia getMeal() periodicamente
   useEffect(() => {
@@ -128,6 +133,71 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     cancelVisitorMode()
     setStatus({type:'visitor-ok',qtd,pratoLabel,pratoDesc})
     setTimeout(reset,3000)
+  }
+
+  const imprimirMarcacoes = async () => {
+    const dataInicio = marcPeriodo==='hoje' ? TODAY : marcPeriodo==='amanha' ? addD(TODAY,1) : marcDe
+    const dataFim     = marcPeriodo==='hoje' ? TODAY : marcPeriodo==='amanha' ? addD(TODAY,1) : marcAte
+    const rows = await fetchMarcacoesPorPeriodo(dataInicio,dataFim)
+    const enriched = rows
+      .filter(r => marcRefeicao==='ambos' || r.tipo===marcRefeicao)
+      .map(r => {
+        const f  = funcionarios.find(f=>f.id===r.funcionario_id)
+        const em = ementas.find(e=>e.id===r.ementa_id)
+        const pk = `prato${r.prato_num}`
+        return {numero:f?.numero||'—', nome:f?.nome||'—', prato:em?.[pk+'_desc']||em?.[pk+'_label']||'—', tipo:r.tipo}
+      })
+    const porNumero = (a,b) => (a.numero||'').localeCompare(b.numero||'', undefined, {numeric:true})
+    const groups = marcRefeicao==='ambos'
+      ? [{label:'ALMOÇO', rows:enriched.filter(r=>r.tipo==='A').sort(porNumero)},
+         {label:'JANTAR',  rows:enriched.filter(r=>r.tipo==='J').sort(porNumero)}].filter(g=>g.rows.length>0)
+      : [{label:null, rows:[...enriched].sort(porNumero)}]
+
+    const periodoLabel  = marcPeriodo==='hoje' ? 'Hoje' : marcPeriodo==='amanha' ? 'Amanhã' : `${fmtS(dataInicio)} a ${fmtS(dataFim)}`
+    const refeicaoLabel = marcRefeicao==='A' ? 'Almoço' : marcRefeicao==='J' ? 'Jantar' : 'Almoço + Jantar'
+    const agora = new Date()
+    const agoraStr = `${String(agora.getDate()).padStart(2,'0')}/${String(agora.getMonth()+1).padStart(2,'0')}/${agora.getFullYear()} ${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')}`
+    const esc = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+
+    const rowsHtml = groups.map(g => `
+      ${g.label ? `<div class="sub">${g.label} (${g.rows.length})</div>` : ''}
+      <table>
+        <tr><th>Nº</th><th>Nome</th><th>Prato</th></tr>
+        ${g.rows.map(r=>`<tr><td>${esc(r.numero)}</td><td>${esc(r.nome)}</td><td>${esc(r.prato)}</td></tr>`).join('')}
+      </table>
+      <div class="total">Total: ${g.rows.length} marcaç${g.rows.length===1?'ão':'ões'}</div>
+    `).join('<div class="sep"></div>')
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Marcações</title><style>
+      @page { size: 80mm auto; margin: 4mm; }
+      * { color:#000 !important; background:#fff !important; box-sizing:border-box; }
+      body { font-family: monospace; font-size: 11px; width: 72mm; margin:0; }
+      .titulo { text-align:center; font-weight:bold; font-size:14px; }
+      .sep { border-top:1px dashed #000; margin:6px 0; }
+      .sub { font-weight:bold; margin-top:6px; }
+      table { width:100%; border-collapse:collapse; margin-top:4px; }
+      th,td { text-align:left; padding:2px 0; vertical-align:top; }
+      th:first-child,td:first-child { width:22px; }
+      .total { font-weight:bold; margin-top:6px; }
+    </style></head><body>
+      <div class="titulo">GI FOODFLOW</div>
+      <div class="sep"></div>
+      <div>Impresso: ${agoraStr}</div>
+      <div>${periodoLabel} · ${refeicaoLabel}</div>
+      <div class="sep"></div>
+      ${rowsHtml}
+      ${groups.length>1 ? `<div class="sep"></div><div class="total">Total geral: ${enriched.length} marcações</div>` : ''}
+      <div class="sep"></div>
+    </body></html>`
+
+    const win = window.open('', '_blank', 'width=400,height=600')
+    if(!win) return
+    win.document.write(html)
+    win.document.close()
+    win.onafterprint = () => win.close()
+    win.focus()
+    win.print()
+    setShowMarc(false)
   }
 
   const process = useCallback(async (val,isRfid=false) => {
@@ -239,6 +309,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
             : navigator.serial
             ? <button onClick={connectSerial} style={{fontSize:12,fontWeight:600,color:C.yellow,background:C.yellow+'18',border:`1px solid ${C.yellow}55`,borderRadius:99,padding:'5px 14px',height:30,cursor:'pointer'}}>{serialStatus==='error'?'⚠ Religar':'Conectar leitor'}</button>
             : null}
+          <button onClick={()=>setShowMarc(true)} style={{fontSize:12,fontWeight:600,color:C.textSub,background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,padding:'5px 14px',height:30,cursor:'pointer'}}>Marcações</button>
           <button onClick={onBack} style={{background:'none',border:'none',color:C.textMuted,fontSize:13,cursor:'pointer'}}>← Sair</button>
         </div>
       </div>
@@ -516,6 +587,60 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
               </div>
             )
           })}
+        </div>
+      )}
+      {showMarc && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{width:480,maxWidth:'92vw',background:V.panel,border:`1px solid ${C.border}`,borderRadius:20,padding:28,display:'flex',flexDirection:'column',gap:22}}>
+            <div style={{fontSize:22,fontWeight:700,color:C.text}}>Imprimir marcações</div>
+
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:C.textMuted,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:10}}>Período</div>
+              <div style={{display:'flex',gap:8}}>
+                {[['hoje','Hoje'],['amanha','Amanhã'],['entre','Entre datas']].map(([v,label]) => (
+                  <button key={v} onClick={()=>setMarcPeriodo(v)}
+                    style={{flex:1,minHeight:56,borderRadius:12,cursor:'pointer',fontSize:14,fontWeight:600,
+                      background:marcPeriodo===v?C.yellow:C.surface2,color:marcPeriodo===v?C.bg:C.textSub,
+                      border:`1px solid ${marcPeriodo===v?C.yellow:C.border}`}}>{label}</button>
+                ))}
+              </div>
+              {marcPeriodo==='entre' && (
+                <div style={{display:'flex',gap:10,marginTop:12}}>
+                  <label style={{flex:1,display:'flex',flexDirection:'column',gap:4,fontSize:12,color:C.textMuted}}>De
+                    <input type="date" value={marcDe} onChange={e=>setMarcDe(e.target.value)}
+                      style={{minHeight:56,borderRadius:10,border:`1px solid ${C.border}`,background:C.surface2,color:C.text,padding:'0 12px',fontSize:14}}/>
+                  </label>
+                  <label style={{flex:1,display:'flex',flexDirection:'column',gap:4,fontSize:12,color:C.textMuted}}>Até
+                    <input type="date" value={marcAte} onChange={e=>setMarcAte(e.target.value)}
+                      style={{minHeight:56,borderRadius:10,border:`1px solid ${C.border}`,background:C.surface2,color:C.text,padding:'0 12px',fontSize:14}}/>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:C.textMuted,letterSpacing:'0.12em',textTransform:'uppercase',marginBottom:10}}>Refeição</div>
+              <div style={{display:'flex',gap:8}}>
+                {[['A','Almoço'],['J','Jantar'],['ambos','Ambos']].map(([v,label]) => (
+                  <button key={v} onClick={()=>setMarcRefeicao(v)}
+                    style={{flex:1,minHeight:56,borderRadius:12,cursor:'pointer',fontSize:14,fontWeight:600,
+                      background:marcRefeicao===v?C.yellow:C.surface2,color:marcRefeicao===v?C.bg:C.textSub,
+                      border:`1px solid ${marcRefeicao===v?C.yellow:C.border}`}}>{label}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{display:'flex',gap:12,marginTop:6}}>
+              <button onClick={()=>setShowMarc(false)}
+                style={{flex:1,minHeight:56,background:'transparent',border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,fontSize:15,fontWeight:600,cursor:'pointer'}}>
+                Cancelar
+              </button>
+              <button onClick={imprimirMarcacoes}
+                style={{flex:2,minHeight:56,background:C.yellow,border:'none',borderRadius:12,color:C.bg,fontSize:15,fontWeight:700,cursor:'pointer'}}>
+                Imprimir
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
