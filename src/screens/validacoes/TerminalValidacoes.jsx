@@ -53,6 +53,9 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   const [marcDe,       setMarcDe]     = useState(TODAY)
   const [marcAte,      setMarcAte]    = useState(TODAY)
   const [marcRefeicao, setMarcRefeicao] = useState('ambos') // 'A' | 'J' | 'ambos'
+  const [marcsAtuais, setMarcsAtuais] = useState([])
+  const [consAtuais,  setConsAtuais]  = useState([])
+  const [faltamModal, setFaltamModal] = useState(null) // {n,label}
 
   // Relógio: reavalia getMeal() periodicamente
   useEffect(() => {
@@ -73,11 +76,13 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   const ementaAtual = meal ? ementas.find(e=>e.data===TODAY&&e.tipo===meal) : null
 
   const loadContadores = async em => {
-    if(!em){ setContadores([]); return }
+    if(!em){ setContadores([]); setMarcsAtuais([]); setConsAtuais([]); return }
     const [{data:marcs},{data:cons}] = await Promise.all([
-      supabase.from('cantina_marcacoes').select('prato_num').eq('ementa_id',em.id),
-      supabase.from('cantina_consumos').select('prato_num').eq('ementa_id',em.id),
+      supabase.from('cantina_marcacoes').select('funcionario_id,prato_num').eq('ementa_id',em.id),
+      supabase.from('cantina_consumos').select('funcionario_id,prato_num').eq('ementa_id',em.id),
     ])
+    setMarcsAtuais(marcs||[])
+    setConsAtuais(cons||[])
     setContadores([1,2,3,4].map(n => {
       const label = em[`prato${n}_label`]
       if(!label) return null
@@ -85,6 +90,16 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
       const served = (cons ||[]).filter(c=>c.prato_num===n).length
       return {n,label,total,left:Math.max(0,total-served)}
     }).filter(Boolean))
+  }
+
+  // Colaboradores com este prato marcado que ainda não consumiram — a partir dos dados já em memória
+  const faltamPorPrato = n => {
+    const consumidos = new Set(consAtuais.filter(c=>c.prato_num===n).map(c=>c.funcionario_id))
+    return marcsAtuais
+      .filter(m => m.prato_num===n && !consumidos.has(m.funcionario_id))
+      .map(m => funcionarios.find(f=>f.id===m.funcionario_id))
+      .filter(Boolean)
+      .sort((a,b) => a.nome.localeCompare(b.nome))
   }
 
   const loadRecentes = async () => {
@@ -602,7 +617,8 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
           {contadores.map(c => {
             const p = ps(c.label)
             return (
-              <div key={c.n} style={{display:'flex',alignItems:'center',gap:12,padding:'8px 14px',background:p.bg,border:`1px solid ${p.border}`,borderRadius:99,flex:1,justifyContent:'space-between'}}>
+              <div key={c.n} onClick={()=>setFaltamModal({n:c.n,label:c.label})}
+                style={{display:'flex',alignItems:'center',gap:12,padding:'8px 14px',background:p.bg,border:`1px solid ${p.border}`,borderRadius:99,flex:1,justifyContent:'space-between',cursor:'pointer'}}>
                 <PratoTag label={c.label}/>
                 <div style={{display:'flex',alignItems:'baseline',gap:4}}>
                   <span style={{fontSize:28,fontWeight:900,color:p.color,lineHeight:1}}>{c.left}</span>
@@ -667,6 +683,38 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
           </div>
         </div>
       )}
+      {faltamModal && (() => {
+        const lista = faltamPorPrato(faltamModal.n)
+        return (
+          <div onClick={()=>setFaltamModal(null)}
+            style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div onClick={e=>e.stopPropagation()}
+              style={{width:480,maxWidth:'92vw',maxHeight:'80vh',background:V.panel,border:`1px solid ${C.border}`,borderRadius:20,padding:28,display:'flex',flexDirection:'column',gap:18}}>
+              <div style={{display:'flex',alignItems:'center',gap:12}}>
+                <PratoTag label={faltamModal.label} large/>
+              </div>
+              <div style={{fontSize:20,fontWeight:700,color:C.text}}>Faltam servir {lista.length} colaborador{lista.length===1?'':'es'}</div>
+              <div style={{flex:1,minHeight:0,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
+                {lista.length===0
+                  ? <div style={{padding:24,textAlign:'center',color:C.textMuted,fontSize:13}}>Ninguém por servir</div>
+                  : lista.map(f => (
+                    <div key={f.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12}}>
+                      <Avatar nome={f.nome} foto={f.foto} size={40}/>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.nome}</div>
+                        <div style={{fontSize:12,color:C.textMuted}}>Nº {f.numero}</div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+              <button onClick={()=>setFaltamModal(null)}
+                style={{width:'100%',minHeight:56,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,fontSize:15,fontWeight:600,cursor:'pointer'}}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
