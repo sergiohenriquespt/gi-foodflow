@@ -279,8 +279,8 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   const selecionarFuncDesmarcar = async func => {
     setDesmarcarFunc(func)
     setDesmarcarMarcs(null)
-    const emsHoje = ementas.filter(e=>e.data===TODAY&&(e.tipo==='A'||e.tipo==='J'))
-    const emIds = emsHoje.map(e=>e.id)
+    const emsFuturas = ementas.filter(e=>e.data>=TODAY&&(e.tipo==='A'||e.tipo==='J'))
+    const emIds = emsFuturas.map(e=>e.id)
     if(emIds.length===0){ setDesmarcarMarcs([]); return }
     const [{data:marcs},{data:cons}] = await Promise.all([
       supabase.from('cantina_marcacoes').select('id,ementa_id,prato_num').eq('funcionario_id',func.id).in('ementa_id',emIds),
@@ -288,10 +288,10 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     ])
     const consumidos = new Set((cons||[]).map(c=>c.ementa_id))
     const pendentes = (marcs||[]).filter(m=>!consumidos.has(m.ementa_id)).map(m => {
-      const em = emsHoje.find(e=>e.id===m.ementa_id)
+      const em = emsFuturas.find(e=>e.id===m.ementa_id)
       const pk = `prato${m.prato_num}`
-      return {id:m.id, tipo:em.tipo, pratoLabel:em[pk+'_label']}
-    })
+      return {id:m.id, data:em.data, tipo:em.tipo, pratoLabel:em[pk+'_label']}
+    }).sort((a,b) => a.data!==b.data ? a.data.localeCompare(b.data) : (a.tipo==='A'?-1:1) - (b.tipo==='A'?-1:1))
     setDesmarcarMarcs(pendentes)
   }
 
@@ -829,9 +829,21 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
 
               {!desmarcarFunc ? (
                 <>
-                  <input type="text" autoFocus placeholder="Pesquisar por nome ou número…" value={desmarcarPesquisa}
-                    onChange={e=>setDesmarcarPesquisa(e.target.value)}
-                    style={{minHeight:56,borderRadius:12,border:`1px solid ${C.border}`,background:C.surface2,color:C.text,padding:'0 16px',fontSize:16,flexShrink:0}}/>
+                  <div style={{background:ARR.card,border:`1px solid ${ARR.border}`,borderRadius:14,height:56,display:'flex',alignItems:'center',padding:'0 16px',flexShrink:0}}>
+                    <span style={{fontSize:22,letterSpacing:2,color:desmarcarPesquisa?C.text:C.textMuted}}>{desmarcarPesquisa || 'Número do funcionário'}</span>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,flexShrink:0}}>
+                    {[1,2,3,4,5,6,7,8,9].map(d => (
+                      <button key={d} onClick={()=>setDesmarcarPesquisa(p=>p+String(d))}
+                        style={{height:56,fontSize:20,fontWeight:600,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.text,cursor:'pointer'}}>{d}</button>
+                    ))}
+                    <button onClick={()=>setDesmarcarPesquisa(p=>p.slice(0,-1))}
+                      style={{height:56,fontSize:18,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,cursor:'pointer'}}>⌫</button>
+                    <button onClick={()=>setDesmarcarPesquisa(p=>p+'0')}
+                      style={{height:56,fontSize:20,fontWeight:600,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.text,cursor:'pointer'}}>0</button>
+                    <button onClick={()=>setDesmarcarPesquisa('')}
+                      style={{height:56,fontSize:13,fontWeight:600,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.textMuted,cursor:'pointer'}}>Limpar</button>
+                  </div>
                   <div style={{flex:1,minHeight:0,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
                     {q.length===0
                       ? <div style={{padding:24,textAlign:'center',color:C.textMuted,fontSize:13}}>Escreve para pesquisar</div>
@@ -870,7 +882,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
                       : desmarcarMarcs.map(m => (
                         <div key={m.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12}}>
                           <div style={{flex:1,minWidth:0}}>
-                            <div style={{fontSize:13,fontWeight:700,color:C.text}}>{m.tipo==='A'?'Almoço':'Jantar'}</div>
+                            <div style={{fontSize:13,fontWeight:700,color:C.text}}>{m.tipo==='A'?'Almoço':'Jantar'} · {m.data===TODAY?'Hoje':fmtS(m.data)}</div>
                             <div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{m.pratoLabel}</div>
                           </div>
                           <button onClick={()=>setDesmarcarConfirm(m)}
