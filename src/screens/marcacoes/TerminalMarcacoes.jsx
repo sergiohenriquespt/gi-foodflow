@@ -66,6 +66,7 @@ function MealBlock({tipo, hour, marc, pratos, readonly, onMarcar, onCancelar}) {
 
 export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}) {
   const s = {...DEFAULTS,...settings}
+  const isKiosk = new URLSearchParams(window.location.search).get('kiosk') === '1'
   const [step,      setStep]      = useState('numero')
   const [numInput,  setNumInput]  = useState('')
   const [pinInput,  setPinInput]  = useState('')
@@ -152,7 +153,7 @@ export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}
         {rfidMsg && <div style={{marginTop:12,padding:'8px 12px',background:'rgba(251,191,36,0.1)',border:'1px solid rgba(251,191,36,0.3)',borderRadius:8,fontSize:12,color:'#fbbf24'}}>{rfidMsg}</div>}
       </div>
     )
-    return <LoginShell leftPanel={leftPanel} value={numInput} onChange={setNumInput} onConfirm={submitNumero} onBack={onBack} serialStatus={serialStatus} error={err} />
+    return <LoginShell leftPanel={leftPanel} value={numInput} onChange={setNumInput} onConfirm={submitNumero} onBack={isKiosk?undefined:onBack} serialStatus={serialStatus} error={err} />
   }
 
   if (step==='pin') {
