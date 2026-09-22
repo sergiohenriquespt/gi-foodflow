@@ -38,6 +38,7 @@ function Pessoa({func, ring, avatar=220, font=60, width=360, metaColor}) {
 
 export default function TerminalValidacoes({funcionarios,ementas,settings,onBack}) {
   const s = {...DEFAULTS,...settings}
+  const isKiosk = new URLSearchParams(window.location.search).get('kiosk') === '1'
   const [numInput,   setNumInput]   = useState('')
   const [status,     setStatus]     = useState(null)
   const [recentes,   setRecentes]   = useState([])
@@ -310,7 +311,9 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
             ? <button onClick={connectSerial} style={{fontSize:12,fontWeight:600,color:C.yellow,background:C.yellow+'18',border:`1px solid ${C.yellow}55`,borderRadius:99,padding:'5px 14px',height:30,cursor:'pointer'}}>{serialStatus==='error'?'⚠ Religar':'Conectar leitor'}</button>
             : null}
           <button onClick={()=>setShowMarc(true)} style={{fontSize:12,fontWeight:600,color:C.textSub,background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,padding:'5px 14px',height:30,cursor:'pointer'}}>Marcações</button>
-          <button onClick={onBack} style={{background:'none',border:'none',color:C.textMuted,fontSize:13,cursor:'pointer'}}>← Sair</button>
+          {!isKiosk && (
+            <button onClick={onBack} style={{background:'none',border:'none',color:C.textMuted,fontSize:13,cursor:'pointer'}}>← Sair</button>
+          )}
         </div>
       </div>
     )
