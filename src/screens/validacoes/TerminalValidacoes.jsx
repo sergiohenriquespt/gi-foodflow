@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
-import { insertVisitantes, fetchConsumosPorData, fetchVisitantesPorData, fetchMarcacoesPorPeriodo, deleteConsumo, deleteVisitante } from '../../lib/queries'
+import { insertVisitantes, fetchConsumosPorData, fetchVisitantesPorData, fetchMarcacoesPorPeriodo, deleteConsumo, deleteVisitante, fetchMarcacoesSemConsumo, insertConsumoBatch, deleteMarcacao } from '../../lib/queries'
 import { C } from '../../constants/colors'
 import { DEFAULTS } from '../../constants/settings'
 import { getMeal, getNextMeal, toMin } from '../../utils/meal'
@@ -57,6 +57,10 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   const [consAtuais,  setConsAtuais]  = useState([])
   const [faltamModal, setFaltamModal] = useState(null) // {n,label}
   const [anularAlvo,  setAnularAlvo]  = useState(null) // recente a anular
+  const [showDesmarcar, setShowDesmarcar] = useState(false)
+  const [desmarcarPesquisa, setDesmarcarPesquisa] = useState('')
+  const [desmarcarFunc,     setDesmarcarFunc]     = useState(null)
+  const [desmarcarMarcs,    setDesmarcarMarcs]     = useState(null) // null = não carregado ainda
 
   // Relógio: reavalia getMeal() periodicamente
   useEffect(() => {
@@ -65,6 +69,29 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   }, [])
 
   const meal = getMeal(s)   // null quando fora do horário
+
+  // Fecho automático do serviço: na transição 'A'/'J' → null, marca como consumidas
+  // todas as marcações da refeição que acabou de fechar que ainda não têm consumo
+  const prevMealRef = useRef(meal)
+  useEffect(() => {
+    if(prevMealRef.current && !meal) fecharServicoAutomaticamente(prevMealRef.current)
+    prevMealRef.current = meal
+  }, [meal])
+
+  const fecharServicoAutomaticamente = async tipoFechado => {
+    const ementaFechada = ementas.find(e=>e.data===TODAY&&e.tipo===tipoFechado)
+    if(!ementaFechada) return
+    const [marcs,{data:cons}] = await Promise.all([
+      fetchMarcacoesSemConsumo(ementaFechada.id),
+      supabase.from('cantina_consumos').select('funcionario_id').eq('ementa_id',ementaFechada.id),
+    ])
+    const jaConsumidos = new Set((cons||[]).map(c=>c.funcionario_id))
+    const pendentes = marcs.filter(m=>!jaConsumidos.has(m.funcionario_id))
+    if(pendentes.length===0) return
+    const agora = new Date().toISOString()
+    await insertConsumoBatch(pendentes.map(m=>({funcionario_id:m.funcionario_id,ementa_id:ementaFechada.id,prato_num:m.prato_num,validado_em:agora})))
+    loadContadores(ementaAtual)
+  }
 
   // Ref para process() — evita stale closure no useSerial
   const processRef = useRef(null)
@@ -248,6 +275,35 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     setAnularAlvo(null)
   }
 
+  const selecionarFuncDesmarcar = async func => {
+    setDesmarcarFunc(func)
+    setDesmarcarMarcs(null)
+    const emsHoje = ementas.filter(e=>e.data===TODAY&&(e.tipo==='A'||e.tipo==='J'))
+    const emIds = emsHoje.map(e=>e.id)
+    if(emIds.length===0){ setDesmarcarMarcs([]); return }
+    const [{data:marcs},{data:cons}] = await Promise.all([
+      supabase.from('cantina_marcacoes').select('id,ementa_id,prato_num').eq('funcionario_id',func.id).in('ementa_id',emIds),
+      supabase.from('cantina_consumos').select('ementa_id').eq('funcionario_id',func.id).in('ementa_id',emIds),
+    ])
+    const consumidos = new Set((cons||[]).map(c=>c.ementa_id))
+    const pendentes = (marcs||[]).filter(m=>!consumidos.has(m.ementa_id)).map(m => {
+      const em = emsHoje.find(e=>e.id===m.ementa_id)
+      const pk = `prato${m.prato_num}`
+      return {id:m.id, tipo:em.tipo, pratoLabel:em[pk+'_label']}
+    })
+    setDesmarcarMarcs(pendentes)
+  }
+
+  const cancelarMarcacao = async marc => {
+    await deleteMarcacao(marc.id)
+    setDesmarcarMarcs(p=>p.filter(m=>m.id!==marc.id))
+    loadContadores(ementaAtual)
+  }
+
+  const fecharDesmarcar = () => {
+    setShowDesmarcar(false); setDesmarcarPesquisa(''); setDesmarcarFunc(null); setDesmarcarMarcs(null)
+  }
+
   const process = useCallback(async (val,isRfid=false) => {
     const v = val.replace(/[^\x21-\x7E]/g,'').trim(); if(!v) return
     // Verifica horário em tempo real via s (sempre a prop atualizada)
@@ -358,6 +414,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
             ? <button onClick={connectSerial} style={{fontSize:12,fontWeight:600,color:C.yellow,background:C.yellow+'18',border:`1px solid ${C.yellow}55`,borderRadius:99,padding:'5px 14px',height:30,cursor:'pointer'}}>{serialStatus==='error'?'⚠ Religar':'Conectar leitor'}</button>
             : null}
           <button onClick={()=>setShowMarc(true)} style={{fontSize:12,fontWeight:600,color:C.textSub,background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,padding:'5px 14px',height:30,cursor:'pointer'}}>Marcações</button>
+          <button onClick={()=>setShowDesmarcar(true)} style={{fontSize:12,fontWeight:600,color:C.textSub,background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,padding:'5px 14px',height:30,cursor:'pointer'}}>Desmarcar</button>
           {!isKiosk && (
             <button onClick={onBack} style={{background:'none',border:'none',color:C.textMuted,fontSize:13,cursor:'pointer'}}>← Sair</button>
           )}
@@ -758,6 +815,78 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
           </div>
         </div>
       )}
+      {showDesmarcar && (() => {
+        const q = desmarcarPesquisa.trim().toLowerCase()
+        const resultados = q.length===0 ? [] : funcionarios.filter(f=>f.ativo && (f.nome.toLowerCase().includes(q) || f.numero.includes(q))).slice(0,20)
+        return (
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{width:480,maxWidth:'92vw',maxHeight:'90vh',background:V.panel,border:`1px solid ${C.border}`,borderRadius:20,padding:28,display:'flex',flexDirection:'column',gap:18}}>
+              <div style={{fontSize:22,fontWeight:700,color:C.text,flexShrink:0}}>Desmarcar</div>
+
+              {!desmarcarFunc ? (
+                <>
+                  <input type="text" autoFocus placeholder="Pesquisar por nome ou número…" value={desmarcarPesquisa}
+                    onChange={e=>setDesmarcarPesquisa(e.target.value)}
+                    style={{minHeight:56,borderRadius:12,border:`1px solid ${C.border}`,background:C.surface2,color:C.text,padding:'0 16px',fontSize:16,flexShrink:0}}/>
+                  <div style={{flex:1,minHeight:0,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
+                    {q.length===0
+                      ? <div style={{padding:24,textAlign:'center',color:C.textMuted,fontSize:13}}>Escreve para pesquisar</div>
+                      : resultados.length===0
+                      ? <div style={{padding:24,textAlign:'center',color:C.textMuted,fontSize:13}}>Sem resultados</div>
+                      : resultados.map(f => (
+                        <button key={f.id} onClick={()=>selecionarFuncDesmarcar(f)}
+                          style={{display:'flex',alignItems:'center',gap:12,padding:'10px 12px',background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,cursor:'pointer',textAlign:'left'}}>
+                          <Avatar nome={f.nome} foto={f.foto} size={40}/>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:14,fontWeight:700,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.nome}</div>
+                            <div style={{fontSize:12,color:C.textMuted}}>Nº {f.numero}</div>
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
+                    <Avatar nome={desmarcarFunc.nome} foto={desmarcarFunc.foto} size={40}/>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:700,color:C.text}}>{desmarcarFunc.nome}</div>
+                      <div style={{fontSize:12,color:C.textMuted}}>Nº {desmarcarFunc.numero}</div>
+                    </div>
+                    <button onClick={()=>{setDesmarcarFunc(null);setDesmarcarMarcs(null)}}
+                      style={{marginLeft:'auto',fontSize:12,color:C.textSub,background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,padding:'5px 12px',cursor:'pointer'}}>
+                      Trocar
+                    </button>
+                  </div>
+                  <div style={{flex:1,minHeight:0,overflowY:'auto',display:'flex',flexDirection:'column',gap:10}}>
+                    {desmarcarMarcs===null
+                      ? <div style={{padding:24,textAlign:'center',color:C.textMuted,fontSize:13}}>A carregar…</div>
+                      : desmarcarMarcs.length===0
+                      ? <div style={{padding:24,textAlign:'center',color:C.textMuted,fontSize:13}}>Sem marcações por cancelar</div>
+                      : desmarcarMarcs.map(m => (
+                        <div key={m.id} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12}}>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:700,color:C.text}}>{m.tipo==='A'?'Almoço':'Jantar'}</div>
+                            <div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{m.pratoLabel}</div>
+                          </div>
+                          <button onClick={()=>cancelarMarcacao(m)}
+                            style={{height:48,padding:'0 16px',background:C.danger,border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',flexShrink:0}}>
+                            Cancelar marcação
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </>
+              )}
+
+              <button onClick={fecharDesmarcar}
+                style={{width:'100%',minHeight:56,flexShrink:0,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,fontSize:15,fontWeight:600,cursor:'pointer'}}>
+                Fechar
+              </button>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
