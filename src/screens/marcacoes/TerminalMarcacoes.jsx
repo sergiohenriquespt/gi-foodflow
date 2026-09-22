@@ -7,7 +7,7 @@ import Avatar from '../../components/Avatar'
 import Icon from '../../components/Icon'
 import Logo from '../../components/Logo'
 import LoginShell, { ARR } from '../../components/LoginShell'
-import PratoCard from '../../components/PratoCard'
+import PratoBtn from '../../components/PratoBtn'
 import useSerial from '../../hooks/useSerial'
 
 function DayChip({d, sel, marcCount, isToday, onClick}) {
@@ -35,7 +35,7 @@ function MealBlock({tipo, hour, marc, pratos, readonly, onMarcar, onCancelar}) {
   const emoji = tipo==='A' ? '🌞' : '🌙'
   const label = tipo==='A' ? 'Almoço' : 'Jantar'
   return (
-    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:22,padding:'22px 24px',flex:1,minHeight:0,display:'flex',flexDirection:'column'}}>
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:22,padding:'22px 24px',width:'100%'}}>
       <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',marginBottom:14}}>
         <div style={{display:'flex',alignItems:'baseline',gap:12}}>
           <span style={{fontSize:30}}>{emoji}</span>
@@ -55,9 +55,9 @@ function MealBlock({tipo, hour, marc, pratos, readonly, onMarcar, onCancelar}) {
               </div>
             : <span style={{fontSize:13,color:C.textMuted,fontStyle:'italic'}}>Escolhe um prato</span>}
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,flex:1,alignContent:'stretch',opacity:readonly&&!marc?0.5:1}}>
+      <div style={{display:'flex',flexDirection:'column',gap:10,opacity:readonly&&!marc?0.5:1}}>
         {pratos.map(({n,label:pratoLabel,desc}) => (
-          <PratoCard key={n} label={pratoLabel} desc={desc} selected={marc?.prato_num===n} disabled={readonly} onClick={readonly?undefined:()=>onMarcar(n)}/>
+          <PratoBtn key={n} label={pratoLabel} desc={desc} selected={marc?.prato_num===n} disabled={readonly} onClick={readonly?undefined:()=>onMarcar(n)}/>
         ))}
       </div>
     </div>
@@ -254,8 +254,8 @@ export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}
         </div>
       </div>
 
-      {/* Meal blocks lado a lado */}
-      <div style={{flex:1,display:'flex',gap:16,padding:'14px 28px 24px',minHeight:0}}>
+      {/* Meal blocks empilhados */}
+      <div style={{flex:1,display:'flex',flexDirection:'column',gap:16,padding:'14px 28px 24px',minHeight:0,overflowY:'auto'}}>
         {['A','J'].map(tipo => {
           const em=dayEm.find(e=>e.tipo===tipo); if(!em) return null
           const marc=getM(em.id)
