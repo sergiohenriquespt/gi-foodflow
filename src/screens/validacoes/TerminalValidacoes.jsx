@@ -145,7 +145,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
         const f  = funcionarios.find(f=>f.id===r.funcionario_id)
         const em = ementas.find(e=>e.id===r.ementa_id)
         const pk = `prato${r.prato_num}`
-        return {numero:f?.numero||'—', nome:f?.nome||'—', prato:em?.[pk+'_desc']||em?.[pk+'_label']||'—', tipo:r.tipo}
+        return {numero:f?.numero||'—', nome:f?.nome||'—', prato:em?.[pk+'_label']||'—', tipo:r.tipo}
       })
     const porNumero = (a,b) => (a.numero||'').localeCompare(b.numero||'', undefined, {numeric:true})
     const groups = marcRefeicao==='ambos'
