@@ -61,6 +61,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   const [desmarcarPesquisa, setDesmarcarPesquisa] = useState('')
   const [desmarcarFunc,     setDesmarcarFunc]     = useState(null)
   const [desmarcarMarcs,    setDesmarcarMarcs]     = useState(null) // null = não carregado ainda
+  const [desmarcarConfirm,  setDesmarcarConfirm]   = useState(null) // marcação pendente de confirmação
 
   // Relógio: reavalia getMeal() periodicamente
   useEffect(() => {
@@ -294,14 +295,17 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     setDesmarcarMarcs(pendentes)
   }
 
-  const cancelarMarcacao = async marc => {
+  const cancelarMarcacao = async () => {
+    if(!desmarcarConfirm) return
+    const marc = desmarcarConfirm
     await deleteMarcacao(marc.id)
     setDesmarcarMarcs(p=>p.filter(m=>m.id!==marc.id))
     loadContadores(ementaAtual)
+    setDesmarcarConfirm(null)
   }
 
   const fecharDesmarcar = () => {
-    setShowDesmarcar(false); setDesmarcarPesquisa(''); setDesmarcarFunc(null); setDesmarcarMarcs(null)
+    setShowDesmarcar(false); setDesmarcarPesquisa(''); setDesmarcarFunc(null); setDesmarcarMarcs(null); setDesmarcarConfirm(null)
   }
 
   const process = useCallback(async (val,isRfid=false) => {
@@ -869,7 +873,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
                             <div style={{fontSize:13,fontWeight:700,color:C.text}}>{m.tipo==='A'?'Almoço':'Jantar'}</div>
                             <div style={{fontSize:12,color:C.textMuted,marginTop:2}}>{m.pratoLabel}</div>
                           </div>
-                          <button onClick={()=>cancelarMarcacao(m)}
+                          <button onClick={()=>setDesmarcarConfirm(m)}
                             style={{height:48,padding:'0 16px',background:C.danger,border:'none',borderRadius:10,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer',flexShrink:0}}>
                             Cancelar marcação
                           </button>
@@ -887,6 +891,27 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
           </div>
         )
       })()}
+      {desmarcarConfirm && (
+        <div onClick={()=>setDesmarcarConfirm(null)}
+          style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:1100,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{width:400,maxWidth:'92vw',background:V.panel,border:`1px solid ${C.border}`,borderRadius:20,padding:28,display:'flex',flexDirection:'column',gap:20,alignItems:'center',textAlign:'center'}}>
+            <Avatar nome={desmarcarFunc.nome} foto={desmarcarFunc.foto} size={56}/>
+            <div style={{fontSize:16,fontWeight:700,color:C.text}}>{desmarcarFunc.nome}</div>
+            <div style={{fontSize:15,color:C.textSub}}>Cancelar esta marcação?</div>
+            <div style={{display:'flex',gap:12,width:'100%'}}>
+              <button onClick={()=>setDesmarcarConfirm(null)}
+                style={{flex:1,minHeight:56,background:'transparent',border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,fontSize:15,fontWeight:600,cursor:'pointer'}}>
+                Cancelar
+              </button>
+              <button onClick={cancelarMarcacao}
+                style={{flex:1,minHeight:56,background:C.danger,border:'none',borderRadius:12,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer'}}>
+                Confirmar cancelamento
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
