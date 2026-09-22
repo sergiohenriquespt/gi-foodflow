@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
-import { insertVisitantes, fetchConsumosPorData, fetchVisitantesPorData, fetchMarcacoesPorPeriodo } from '../../lib/queries'
+import { insertVisitantes, fetchConsumosPorData, fetchVisitantesPorData, fetchMarcacoesPorPeriodo, deleteConsumo, deleteVisitante } from '../../lib/queries'
 import { C } from '../../constants/colors'
 import { DEFAULTS } from '../../constants/settings'
 import { getMeal, getNextMeal, toMin } from '../../utils/meal'
@@ -56,6 +56,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   const [marcsAtuais, setMarcsAtuais] = useState([])
   const [consAtuais,  setConsAtuais]  = useState([])
   const [faltamModal, setFaltamModal] = useState(null) // {n,label}
+  const [anularAlvo,  setAnularAlvo]  = useState(null) // recente a anular
 
   // Relógio: reavalia getMeal() periodicamente
   useEffect(() => {
@@ -142,10 +143,10 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   const confirmarVisitantes = async () => {
     if(!visitorPrato || !ementaAtual) return
     const qtd = visitorQtd
-    const {error} = await insertVisitantes(ementaAtual.id, visitorPrato, qtd)
+    const {data,error} = await insertVisitantes(ementaAtual.id, visitorPrato, qtd)
     if(error) return
     const pk=`prato${visitorPrato}`,pratoLabel=ementaAtual[pk+'_label'],pratoDesc=ementaAtual[pk+'_desc']
-    setRecentes(p=>[{id:`v-${Date.now()}`,validado_em:new Date().toISOString(),nome:'Visitante(s)',foto:null,quantidade:qtd,isVisitante:true,pratoLabel,pratoDesc},...p].slice(0,parseInt(s.validacao_sidebar_num)||10))
+    setRecentes(p=>[{id:`v-${data.id}`,validado_em:data.registado_em||new Date().toISOString(),nome:'Visitante(s)',foto:null,quantidade:qtd,isVisitante:true,pratoLabel,pratoDesc},...p].slice(0,parseInt(s.validacao_sidebar_num)||10))
     cancelVisitorMode()
     setStatus({type:'visitor-ok',qtd,pratoLabel,pratoDesc})
     setTimeout(reset,3000)
@@ -235,6 +236,16 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     win.focus()
     win.print()
     setShowMarc(false)
+  }
+
+  const anularConsumo = async () => {
+    if(!anularAlvo) return
+    const r = anularAlvo
+    if(r.isVisitante) await deleteVisitante(r.id.replace(/^v-/,''))
+    else await deleteConsumo(r.id)
+    setRecentes(p=>p.filter(x=>x.id!==r.id))
+    loadContadores(ementaAtual)
+    setAnularAlvo(null)
   }
 
   const process = useCallback(async (val,isRfid=false) => {
@@ -581,7 +592,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
             : recentes.map((r,i) => {
               const p = ps(r.pratoLabel)
               return (
-                <div key={r.id} style={{padding:'12px 20px',borderBottom:`1px solid ${p.border}`,display:'flex',alignItems:'center',gap:12,background:p.bg,outline:i===0?`1.5px solid ${p.border}`:'none',outlineOffset:'-1.5px'}}>
+                <div key={r.id} style={{position:'relative',padding:'12px 34px 12px 20px',borderBottom:`1px solid ${p.border}`,display:'flex',alignItems:'center',gap:12,background:p.bg,outline:i===0?`1.5px solid ${p.border}`:'none',outlineOffset:'-1.5px'}}>
                   {r.isVisitante
                     ? <div style={{width:36,height:36,borderRadius:'50%',background:C.surface2,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                         <Icon name="users" size={18} color={C.textMuted}/>
@@ -598,6 +609,12 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
                       <span style={{color:C.textMuted}}> · {fmtHM(r.validado_em)}</span>
                     </div>
                   </div>
+                  <button onClick={()=>setAnularAlvo(r)}
+                    style={{position:'absolute',top:8,right:8,width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',background:'transparent',border:'none',borderRadius:6,color:C.textMuted,fontSize:14,lineHeight:1,cursor:'pointer'}}
+                    onTouchStart={e=>{e.currentTarget.style.color=C.danger}}
+                    onTouchEnd={e=>{e.currentTarget.style.color=C.textMuted}}>
+                    ✕
+                  </button>
                 </div>
               )
             })}
@@ -715,6 +732,32 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
           </div>
         )
       })()}
+      {anularAlvo && (
+        <div onClick={()=>setAnularAlvo(null)}
+          style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{width:400,maxWidth:'92vw',background:V.panel,border:`1px solid ${C.border}`,borderRadius:20,padding:28,display:'flex',flexDirection:'column',gap:20,alignItems:'center',textAlign:'center'}}>
+            {anularAlvo.isVisitante
+              ? <div style={{width:56,height:56,borderRadius:'50%',background:C.surface2,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                  <Icon name="users" size={26} color={C.textMuted}/>
+                </div>
+              : <Avatar nome={anularAlvo.nome} foto={anularAlvo.foto} size={56}/>
+            }
+            <div style={{fontSize:16,fontWeight:700,color:C.text}}>{anularAlvo.isVisitante ? 'Visitantes' : anularAlvo.nome}</div>
+            <div style={{fontSize:15,color:C.textSub}}>Anular este consumo?</div>
+            <div style={{display:'flex',gap:12,width:'100%'}}>
+              <button onClick={()=>setAnularAlvo(null)}
+                style={{flex:1,minHeight:56,background:'transparent',border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,fontSize:15,fontWeight:600,cursor:'pointer'}}>
+                Cancelar
+              </button>
+              <button onClick={anularConsumo}
+                style={{flex:1,minHeight:56,background:C.danger,border:'none',borderRadius:12,color:'#fff',fontSize:15,fontWeight:700,cursor:'pointer'}}>
+                Confirmar anulação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

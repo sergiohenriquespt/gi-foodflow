@@ -23,7 +23,13 @@ export const setDiaFechado   = async data => supabase.from('cantina_dias_fechado
 export const unsetDiaFechado = async data => supabase.from('cantina_dias_fechados').delete().eq('data',data)
 
 export const insertVisitantes = async (ementa_id, prato_num, quantidade) =>
-  supabase.from('cantina_visitantes').insert({ ementa_id, prato_num, quantidade })
+  supabase.from('cantina_visitantes').insert({ ementa_id, prato_num, quantidade }).select().single()
+
+export const deleteConsumo = async (id) =>
+  supabase.from('cantina_consumos').delete().eq('id', id)
+
+export const deleteVisitante = async (id) =>
+  supabase.from('cantina_visitantes').delete().eq('id', id)
 
 export const fetchVisitantes = async () => {
   const { data } = await supabase.from('cantina_visitantes').select('*').order('registado_em', { ascending: false })
