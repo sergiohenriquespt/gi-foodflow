@@ -34,9 +34,9 @@ export default function SecFuncionarios({funcionarios, reload}) {
     !search ||
     f.nome.toLowerCase().includes(search.toLowerCase()) ||
     String(f.numero).includes(search)
-  )
+  ).sort((a, b) => parseInt(a.numero) - parseInt(b.numero))
 
-  const cols = '40px 1fr 92px 170px 68px 108px'
+  const cols = '40px 76px 1fr 92px 170px 68px 108px'
 
   return (
     <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden',minHeight:0}}>
@@ -79,8 +79,8 @@ export default function SecFuncionarios({funcionarios, reload}) {
 
           {/* Header */}
           <div style={{display:'grid',gridTemplateColumns:cols,padding:'10px 18px',gap:12,background:C.surface2,borderBottom:`1px solid ${C.border}`,alignItems:'center'}}>
-            {['','Funcionário','Estado','RFID','PIN',''].map((h,i) => (
-              <div key={i} style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.1em'}}>{h}</div>
+            {['','ID','Nome','Estado','RFID','PIN',''].map((h,i) => (
+              <div key={i} style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:'uppercase',letterSpacing:'0.1em',textAlign:i===1?'center':'left'}}>{h}</div>
             ))}
           </div>
 
@@ -97,10 +97,9 @@ export default function SecFuncionarios({funcionarios, reload}) {
 
                 <Avatar nome={f.nome || '?'} foto={f.foto || f.foto_url} size={32}/>
 
-                <div>
-                  <div style={{fontSize:14,fontWeight:600,color:C.text}}>{f.nome}</div>
-                  <div style={{fontSize:11,color:C.textMuted,marginTop:1}}>Nº {f.numero}</div>
-                </div>
+                <div style={{fontSize:13,fontWeight:600,color:C.textSub,textAlign:'center'}}>{f.numero}</div>
+
+                <div style={{fontSize:14,fontWeight:600,color:C.text}}>{f.nome}</div>
 
                 <span style={{fontSize:11,fontWeight:700,padding:'3px 10px',borderRadius:99,display:'inline-flex',alignItems:'center',gap:4,
                   background: f.ativo ? C.successBg : C.surface2,
