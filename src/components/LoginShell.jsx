@@ -56,8 +56,8 @@ export default function LoginShell({leftPanel, value, secret=false, onChange, on
               <button key={d} onClick={()=>onChange(p=>p.length<10?p+String(d):p)} style={cell}>{d}</button>
             ))}
             <button onClick={()=>onChange(p=>p.slice(0,-1))} style={{...cell,fontSize:24,color:A.ink3}}>⌫</button>
-            <button onClick={()=>onChange(p=>p.length<10?p+'0':p)} style={cell}>0</button>
-            <button onClick={onConfirm} style={{...cell,background:A.accent,border:'none',color:A.accentText,fontWeight:800}}>→</button>
+            <button onClick={()=>onChange(p=>p.length<10?p+'0':p)} style={{...cell,gridColumn:'span 2'}}>0</button>
+            <button onClick={onConfirm} style={{...cell,gridColumn:'1 / -1',background:'#34d399',border:'none',color:'#0d2e22',fontWeight:800,letterSpacing:'0.08em'}}>ENTER</button>
           </div>
           {error && <div style={{marginTop:12,padding:'8px 12px',background:'rgba(248,113,113,0.1)',border:'1px solid rgba(248,113,113,0.3)',borderRadius:8,fontSize:13,color:'#f87171',textAlign:'center'}}>{error}</div>}
           {belowKeypad}
