@@ -59,6 +59,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   const [anularAlvo,  setAnularAlvo]  = useState(null) // recente a anular
   const [showDesmarcar, setShowDesmarcar] = useState(false)
   const [desmarcarPesquisa, setDesmarcarPesquisa] = useState('')
+  const [desmarcarQuery,    setDesmarcarQuery]    = useState('') // só atualiza ao confirmar (ENTER)
   const [desmarcarFunc,     setDesmarcarFunc]     = useState(null)
   const [desmarcarMarcs,    setDesmarcarMarcs]     = useState(null) // null = não carregado ainda
   const [desmarcarConfirm,  setDesmarcarConfirm]   = useState(null) // marcação pendente de confirmação
@@ -305,8 +306,27 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
   }
 
   const fecharDesmarcar = () => {
-    setShowDesmarcar(false); setDesmarcarPesquisa(''); setDesmarcarFunc(null); setDesmarcarMarcs(null); setDesmarcarConfirm(null)
+    setShowDesmarcar(false); setDesmarcarPesquisa(''); setDesmarcarQuery(''); setDesmarcarFunc(null); setDesmarcarMarcs(null); setDesmarcarConfirm(null)
   }
+
+  const executarPesquisaDesmarcar = () => {
+    if(desmarcarPesquisa.length===0) return
+    setDesmarcarQuery(desmarcarPesquisa)
+  }
+
+  // Teclado físico ativo enquanto o modal Desmarcar está aberto
+  useEffect(() => {
+    if(!showDesmarcar) return
+    const h = e => {
+      if(e.key==='Escape'){ fecharDesmarcar(); return }
+      if(desmarcarFunc) return // fora do passo de pesquisa
+      if(e.key>='0'&&e.key<='9'){ setDesmarcarPesquisa(p=>p.length<10?p+e.key:p); return }
+      if(e.key==='Backspace'){ setDesmarcarPesquisa(p=>p.slice(0,-1)); return }
+      if(e.key==='Enter'){ executarPesquisaDesmarcar(); return }
+    }
+    window.addEventListener('keydown',h)
+    return () => window.removeEventListener('keydown',h)
+  }, [showDesmarcar, desmarcarFunc, desmarcarPesquisa])
 
   const process = useCallback(async (val,isRfid=false) => {
     const v = val.replace(/[^\x21-\x7E]/g,'').trim(); if(!v) return
@@ -820,7 +840,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
         </div>
       )}
       {showDesmarcar && (() => {
-        const q = desmarcarPesquisa.trim().toLowerCase()
+        const q = desmarcarQuery.trim().toLowerCase()
         const resultados = q.length===0 ? [] : funcionarios.filter(f=>f.ativo && (f.nome.toLowerCase().includes(q) || f.numero.includes(q))).slice(0,20)
         return (
           <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
@@ -841,8 +861,8 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
                       style={{height:56,fontSize:18,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,cursor:'pointer'}}>⌫</button>
                     <button onClick={()=>setDesmarcarPesquisa(p=>p+'0')}
                       style={{height:56,fontSize:20,fontWeight:600,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.text,cursor:'pointer'}}>0</button>
-                    <button onClick={()=>setDesmarcarPesquisa('')}
-                      style={{height:56,fontSize:13,fontWeight:600,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.textMuted,cursor:'pointer'}}>Limpar</button>
+                    <button onClick={executarPesquisaDesmarcar}
+                      style={{height:56,fontSize:14,fontWeight:700,background:C.yellow,border:'none',borderRadius:12,color:C.bg,cursor:'pointer'}}>↵ ENTER</button>
                   </div>
                   <div style={{flex:1,minHeight:0,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
                     {q.length===0
