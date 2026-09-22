@@ -689,12 +689,12 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
           <div onClick={()=>setFaltamModal(null)}
             style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.65)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
             <div onClick={e=>e.stopPropagation()}
-              style={{width:480,maxWidth:'92vw',maxHeight:'80vh',background:V.panel,border:`1px solid ${C.border}`,borderRadius:20,padding:28,display:'flex',flexDirection:'column',gap:18}}>
-              <div style={{display:'flex',alignItems:'center',gap:12}}>
+              style={{width:480,maxWidth:'92vw',maxHeight:'90vh',background:V.panel,border:`1px solid ${C.border}`,borderRadius:20,padding:28,display:'flex',flexDirection:'column',gap:18}}>
+              <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
                 <PratoTag label={faltamModal.label} large/>
               </div>
-              <div style={{fontSize:20,fontWeight:700,color:C.text}}>Faltam servir {lista.length} colaborador{lista.length===1?'':'es'}</div>
-              <div style={{flex:1,minHeight:0,overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
+              <div style={{fontSize:20,fontWeight:700,color:C.text,flexShrink:0}}>Faltam servir {lista.length} colaborador{lista.length===1?'':'es'}</div>
+              <div style={{maxHeight:'calc(100vh - 240px)',overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
                 {lista.length===0
                   ? <div style={{padding:24,textAlign:'center',color:C.textMuted,fontSize:13}}>Ninguém por servir</div>
                   : lista.map(f => (
@@ -708,7 +708,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
                   ))}
               </div>
               <button onClick={()=>setFaltamModal(null)}
-                style={{width:'100%',minHeight:56,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,fontSize:15,fontWeight:600,cursor:'pointer'}}>
+                style={{width:'100%',minHeight:56,flexShrink:0,background:C.surface2,border:`1px solid ${C.border}`,borderRadius:12,color:C.textSub,fontSize:15,fontWeight:600,cursor:'pointer'}}>
                 Fechar
               </button>
             </div>
