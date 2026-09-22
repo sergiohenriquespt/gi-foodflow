@@ -11,6 +11,8 @@ const BIG = {fontStyle:'italic',fontSize:26,color:'#e2e8f0',lineHeight:1}
 export default function SecFuncionarios({funcionarios, reload}) {
   const [editing, setEditing] = useState(null)
   const [search,  setSearch]  = useState('')
+  const [deleting,     setDeleting]     = useState(null) // funcionário alvo de eliminação
+  const [deleteError,  setDeleteError]  = useState('')
 
   const blank = {id:null, numero:'', nome:'', pin:'', rfid:'', foto:null, ativo:true}
 
@@ -22,10 +24,18 @@ export default function SecFuncionarios({funcionarios, reload}) {
     setEditing(null)
   }
 
-  const del = async id => {
-    if (!window.confirm('Eliminar funcionário?')) return
-    await supabase.from('cantina_funcionarios').delete().eq('id', id)
+  const confirmarDelete = async () => {
+    if (!deleting) return
+    const { error } = await supabase.from('cantina_funcionarios').delete().eq('id', deleting.id)
+    if (error) {
+      setDeleteError(error.code === '23503'
+        ? 'Não é possível eliminar este funcionário porque tem marcações ou consumos registados.'
+        : 'Ocorreu um erro ao eliminar o funcionário.')
+      return
+    }
     await reload()
+    setDeleting(null)
+    setDeleteError('')
   }
 
   const ativos   = funcionarios.filter(f => f.ativo).length
@@ -124,7 +134,7 @@ export default function SecFuncionarios({funcionarios, reload}) {
                     style={{height:28,padding:'0 11px',background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,fontSize:12,fontWeight:600,color:C.textSub,cursor:'pointer',transition:'all 0.15s'}}>
                     Editar
                   </button>
-                  <button onClick={() => del(f.id)}
+                  <button onClick={() => { setDeleting(f); setDeleteError('') }}
                     onMouseEnter={e => { e.currentTarget.style.borderColor=`${C.danger}55`; e.currentTarget.style.color=C.danger }}
                     onMouseLeave={e => { e.currentTarget.style.borderColor=C.border; e.currentTarget.style.color=C.textMuted }}
                     style={{width:28,height:28,background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,fontSize:12,color:C.textMuted,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',transition:'all 0.15s'}}>
@@ -144,6 +154,31 @@ export default function SecFuncionarios({funcionarios, reload}) {
           <div onClick={() => setEditing(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:40}}/>
           <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',zIndex:50,width:520,background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:28,boxShadow:'0 32px 80px rgba(0,0,0,0.5)'}}>
             <FuncionarioEditor form={editing} onSave={save} onCancel={() => setEditing(null)}/>
+          </div>
+        </>
+      )}
+
+      {/* ── Confirmação de eliminação ── */}
+      {deleting !== null && (
+        <>
+          <div onClick={() => { setDeleting(null); setDeleteError('') }} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',zIndex:40}}/>
+          <div style={{position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',zIndex:50,width:400,background:C.surface,border:`1px solid ${C.border}`,borderRadius:20,padding:28,boxShadow:'0 32px 80px rgba(0,0,0,0.5)'}}>
+            <div style={{fontSize:16,fontWeight:600,color:C.text}}>Eliminar {deleting.nome}?</div>
+            {deleteError && (
+              <div style={{marginTop:12,padding:'10px 12px',background:C.dangerBg,border:`1px solid ${C.danger}33`,borderRadius:10,fontSize:13,color:C.danger}}>
+                {deleteError}
+              </div>
+            )}
+            <div style={{display:'flex',gap:10,marginTop:20}}>
+              <button onClick={() => { setDeleting(null); setDeleteError('') }}
+                style={{flex:1,height:38,background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,color:C.textSub,fontSize:13,fontWeight:600,cursor:'pointer'}}>
+                Cancelar
+              </button>
+              <button onClick={confirmarDelete}
+                style={{flex:1,height:38,background:C.danger,border:'none',borderRadius:99,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer'}}>
+                Eliminar
+              </button>
+            </div>
           </div>
         </>
       )}
