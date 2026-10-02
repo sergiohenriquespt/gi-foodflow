@@ -180,7 +180,7 @@ export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}
     if(d<TODAY) return false
     if(!serveFds){const wd=new Date(d+'T12:00:00').getDay();if(wd===0||wd===6) return false}
     return true
-  }).slice(0,14)
+  })
 
   const dayEm  = ementas.filter(e=>e.data===selDay)
   const getM   = eid => marcacoes.find(m=>m.funcionario_id===func.id&&m.ementa_id===eid)
