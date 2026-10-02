@@ -195,6 +195,8 @@ export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}
     setWeekOffset(off)
     if (wd.length && !wd.includes(selDay)) setSelDay(wd[0])
   }
+  const lastWeek = Math.max(0, Math.ceil(days.length/5) - 1)
+  const goFirst  = () => { const wd = days.slice(0,5); setWeekOffset(0); if (wd.length) setSelDay(wd.includes(TODAY)?TODAY:wd[0]) }
   const weekEm     = ementas.filter(e=>weekDays.includes(e.data))
   const nMarcadas  = weekEm.filter(e=>getM(e.id)).length
   const nPorMarcar = weekEm.length - nMarcadas
@@ -205,7 +207,8 @@ export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}
       ? `Semana de ${a.getDate()} a ${b.getDate()} de ${MN[b.getMonth()]}`
       : `Semana de ${a.getDate()} ${MN[a.getMonth()]} a ${b.getDate()} ${MN[b.getMonth()]}`
   })()
-  const weekBtn = {height:32,padding:'0 14px',cursor:'pointer',background:'transparent',border:`1px solid ${C.border}`,borderRadius:99,fontSize:12,fontWeight:600,color:C.textSub,display:'inline-flex',alignItems:'center',gap:6}
+  const navBtn = off => ({height:56,minWidth:56,padding:'0 18px',cursor:off?'default':'pointer',opacity:off?0.35:1,background:C.surface,border:`1px solid ${C.border}`,borderRadius:99,fontSize:15,fontWeight:700,color:C.text,display:'inline-flex',alignItems:'center',justifyContent:'center',gap:8})
+  const firstLabel = days[0]===TODAY ? 'Hoje' : 'Primeira'
 
   return (
     <div style={{height:'100vh',background:C.bg,color:C.text,display:'flex',flexDirection:'column',overflow:'hidden'}}>
@@ -241,8 +244,12 @@ export default function TerminalMarcacoes({funcionarios,ementas,settings,onBack}
             </span>
             <span style={{color:C.textMuted}}>·</span>
             <span>{nPorMarcar} por marcar</span>
-            {hasPrev && <button onClick={()=>goWeek(weekOffset-1)} style={{...weekBtn,marginLeft:6}}>← Semana anterior</button>}
-            {hasNext && <button onClick={()=>goWeek(weekOffset+1)} style={{...weekBtn,marginLeft:hasPrev?0:6}}>Próxima semana →</button>}
+            <div style={{display:'flex',gap:12,marginLeft:6}}>
+              <button disabled={!hasPrev} onClick={goFirst} style={navBtn(!hasPrev)}>⏮ {firstLabel}</button>
+              <button disabled={!hasPrev} onClick={()=>goWeek(weekOffset-1)} aria-label="Semana anterior" style={{...navBtn(!hasPrev),fontSize:24}}>◀</button>
+              <button disabled={!hasNext} onClick={()=>goWeek(weekOffset+1)} aria-label="Próxima semana" style={{...navBtn(!hasNext),fontSize:24}}>▶</button>
+              <button disabled={!hasNext} onClick={()=>goWeek(lastWeek)} style={navBtn(!hasNext)}>Última ⏭</button>
+            </div>
           </div>
         </div>
         <div style={{display:'flex',gap:12}}>
