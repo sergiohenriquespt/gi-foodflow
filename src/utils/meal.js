@@ -9,6 +9,8 @@ export const getMeal = s => {
   return null
 }
 
+export const fmtHorario = (s, tipo) => tipo==='A' ? `${s.almoco_inicio} – ${s.almoco_fim}` : `${s.jantar_inicio} – ${s.jantar_fim}`
+
 export const getNextMeal = s => {
   const cur = new Date().getHours()*60 + new Date().getMinutes()
   if (cur < toMin(s.almoco_inicio)) return {tipo:'A', hora:s.almoco_inicio}

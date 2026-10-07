@@ -52,8 +52,8 @@ export default function SecConsumos({consumos, visitantes=[], funcionarios, emen
   )
 
   const sorted = [
-    ...filtered.map(c => ({key:`c-${c.id}`, ts:c.validado_em, data:c.data, tipo:c.tipo, pratoLabel:c.pratoLabel, quantidade:1, nome:c.nome, foto:c.foto, numero:c.numero})),
-    ...filteredVisitantes.map(v => ({key:`v-${v.id}`, ts:v.registado_em, data:v.data, tipo:v.tipo, pratoLabel:v.pratoLabel, quantidade:v.quantidade})),
+    ...filtered.map(c => ({key:`c-${c.id}`, ts:c.validado_em, data:c.data, tipo:c.tipo, pratoNum:c.prato_num, pratoLabel:c.pratoLabel, quantidade:1, nome:c.nome, foto:c.foto, numero:c.numero})),
+    ...filteredVisitantes.map(v => ({key:`v-${v.id}`, ts:v.registado_em, data:v.data, tipo:v.tipo, pratoNum:v.prato_num, pratoLabel:v.pratoLabel, quantidade:v.quantidade})),
   ].sort((a, b) => new Date(b.ts) - new Date(a.ts))
 
   const visQtd  = tipo => filteredVisitantes.filter(v => !tipo || v.tipo === tipo).reduce((s,v)=>s+v.quantidade,0)
@@ -148,7 +148,7 @@ export default function SecConsumos({consumos, visitantes=[], funcionarios, emen
                 }
                 <div style={{fontSize:12,color:C.textSub}}>{fmtS(c.data)}</div>
                 <div style={{fontSize:13,color:C.textSub}}>{c.tipo === 'A' ? '🌞 Almoço' : '🌙 Jantar'}</div>
-                <PratoTag label={c.pratoLabel}/>
+                <PratoTag slot={c.pratoNum} label={c.pratoLabel}/>
                 <div style={{fontSize:c.nome?12:15,fontWeight:c.nome?400:800,color:c.nome?C.textMuted:C.yellow,fontFamily:c.nome?'monospace':'inherit'}}>{c.quantidade}</div>
                 <div style={{fontSize:12,color:C.textMuted,fontFamily:'monospace'}}>{fmtHM(c.ts)}</div>
               </div>

@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fetchDiasFechados, setDiaFechado, unsetDiaFechado } from '../../lib/queries'
 import { C } from '../../constants/colors'
-import { ps } from '../../constants/pratos'
+import { pratoColors } from '../../constants/pratos'
 import { WD, MN_FULL, TODAY, addD, d2s } from '../../utils/date'
+import { fmtHorario } from '../../utils/meal'
+import { DEFAULTS } from '../../constants/settings'
 import EmentaEditor from './EmentaEditor'
 import Icon from '../../components/Icon'
 
@@ -110,7 +112,7 @@ function EmentaCell({ ementa, marcCount, onClick }) {
       )}
       {!isEmpty && pratos.map((p,i) => {
         if (!p.label) return null
-        const {bg,border:bd,color:fg} = ps(p.label)
+        const {bg,bd,fg} = pratoColors(i+1)
         return (
           <div key={i} style={{
             display:'flex',alignItems:'center',gap:8,padding:'7px 9px',borderRadius:8,
@@ -119,8 +121,9 @@ function EmentaCell({ ementa, marcCount, onClick }) {
             opacity:p.desc?1:0.55
           }}>
             <span style={{fontSize:9.5,fontWeight:700,letterSpacing:'0.06em',padding:'2px 7px',borderRadius:4,
-              background:bg,color:fg,border:`1px solid ${bd}`,minWidth:36,textAlign:'center',flexShrink:0}}>
-              {p.label==='Vegetariano'?'Veg':p.label.slice(0,3)}
+              background:bg,color:fg,border:`1px solid ${bd}`,minWidth:36,maxWidth:'45%',textAlign:'center',flexShrink:0,
+              overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              {p.label}
             </span>
             <div style={{flex:1,fontSize:11.5,color:p.desc?C.text:C.textMuted,fontStyle:p.desc?'normal':'italic',
               lineHeight:1.3,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>
@@ -152,7 +155,8 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
     }
   }
 
-  const servir_fds = settings?.servir_fds === 'true'
+  const s = {...DEFAULTS,...settings}
+  const servir_fds = s.servir_fds === 'true'
   const daysPerWeek = servir_fds ? 7 : 5
   const weekStart = getMondayOf(TODAY)
   const weekDates = Array.from({length:daysPerWeek}, (_,i) => addD(weekStart, weekOffset*7 + i))
@@ -163,7 +167,9 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
     acc + [1,2,3,4].filter(n => e[`prato${n}_desc`]).length, 0)
   const closedThisWeek = weekDates.filter(d => diasFechados.includes(d))
   const totalSlots = (daysPerWeek - closedThisWeek.length) * 2 * 4
-  const totalMarcs = marcacoesAll.filter(m => weekDates.includes(m.data)).length
+  // marcações não têm data própria: contam-se pelas ementas da semana
+  const weekIds = new Set(weekEmentas.map(e => e.id))
+  const totalMarcs = marcacoesAll.filter(m => weekIds.has(m.ementa_id)).length
 
   const newEmenta = (data,tipo) => ({
     id:null,data,tipo,
@@ -239,7 +245,7 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
 
         {/* Almoço row */}
         <div style={{display:'grid',gridTemplateColumns:`70px repeat(${daysPerWeek}, 1fr)`,gap:12,flex:1,minHeight:0}}>
-          <MealLabel emoji="🌞" label="Almoço" hour="12:00 — 14:30"/>
+          <MealLabel emoji="🌞" label="Almoço" hour={fmtHorario(s,'A')}/>
           {weekDates.map(d => {
             if (diasFechados.includes(d)) return <ClosedCell key={d}/>
             const em = ementas.find(e=>e.data===d&&e.tipo==='A')
@@ -250,7 +256,7 @@ export default function SecEmentas({ementas,reload,marcacoesAll=[],settings}) {
 
         {/* Jantar row */}
         <div style={{display:'grid',gridTemplateColumns:`70px repeat(${daysPerWeek}, 1fr)`,gap:12,flex:1,minHeight:0}}>
-          <MealLabel emoji="🌙" label="Jantar" hour="19:00 — 21:30"/>
+          <MealLabel emoji="🌙" label="Jantar" hour={fmtHorario(s,'J')}/>
           {weekDates.map(d => {
             if (diasFechados.includes(d)) return <ClosedCell key={d}/>
             const em = ementas.find(e=>e.data===d&&e.tipo==='J')

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { C } from '../../constants/colors'
-import { ps } from '../../constants/pratos'
+import PratoTag from '../../components/PratoTag'
 import { fmtF } from '../../utils/date'
 import Icon from '../../components/Icon'
 
@@ -26,11 +26,10 @@ export default function EmentaEditor({ementa,onSave,onCancel,onDelete,onDeleteCo
       {/* Prato slots */}
       {[1,2,3,4].map(n => {
         const label = f[`prato${n}_label`] ?? ''
-        const {bg,border:bd,color:fg} = ps(label)
         return (
           <div key={n} style={{marginBottom:10,padding:'12px 14px',background:C.surface2,borderRadius:12,border:`1px solid ${C.border}`,display:'flex',gap:10,alignItems:'center'}}>
-            <span style={{fontSize:9.5,fontWeight:700,letterSpacing:'0.06em',padding:'3px 8px',borderRadius:5,background:bg,color:fg,border:`1px solid ${bd}`,minWidth:44,textAlign:'center',flexShrink:0}}>
-              {label==='Vegetariano'?'Veg':label?label.slice(0,3):`P${n}`}
+            <span style={{flexShrink:0,maxWidth:90,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              <PratoTag slot={n} label={label || `Prato ${n}`}/>
             </span>
             <input value={f[`prato${n}_label`]??''} onChange={e=>set(`prato${n}_label`,e.target.value)}
               placeholder="Tipo (Carne, Peixe…)"

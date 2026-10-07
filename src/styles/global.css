@@ -1,5 +1,13 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Cores dos pratos por posição (slot 1–4), via pratoColors(n) */
+:root {
+  --prato-carne-fg: #f4a49a; --prato-carne-bg: #2d1a1a; --prato-carne-bd: #5c2020;  /* slot 1 */
+  --prato-peixe-fg: #7ec8f0; --prato-peixe-bg: #0f1e2d; --prato-peixe-bd: #1a3d5c;  /* slot 2 */
+  --prato-dieta-fg: #6ee7b7; --prato-dieta-bg: #0d2218; --prato-dieta-bd: #1a5c3a;  /* slot 3 */
+  --prato-veg-fg:   #fcd34d; --prato-veg-bg:   #1e1b08; --prato-veg-bd:   #4a420a;  /* slot 4 */
+}
+
 body {
   background: #151920;
   color: #e2e8f0;

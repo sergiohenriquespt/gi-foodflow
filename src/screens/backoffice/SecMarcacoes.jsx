@@ -118,7 +118,7 @@ export default function SecMarcacoes({marcacoes, funcionarios, ementas}) {
                   </div>
                   <div style={{fontSize:12,color:C.textSub}}>{fmtS(m.data)}</div>
                   <div style={{fontSize:13}}>{m.tipo === 'A' ? '🌞' : '🌙'}</div>
-                  <PratoTag label={m.pratoLabel}/>
+                  <PratoTag slot={m.prato_num} label={m.pratoLabel}/>
                   <div style={{fontSize:12,color:C.textSub,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.pratoDesc}</div>
                 </div>
               ))
@@ -161,7 +161,7 @@ export default function SecMarcacoes({marcacoes, funcionarios, ementas}) {
                               <span style={{fontSize:13,fontWeight:500,color:C.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.nome}</span>
                             </div>
                             <div style={{fontSize:12,color:C.textSub}}>{fmtS(m.data)}</div>
-                            <PratoTag label={m.pratoLabel}/>
+                            <PratoTag slot={m.prato_num} label={m.pratoLabel}/>
                           </div>
                         ))}
                       </>

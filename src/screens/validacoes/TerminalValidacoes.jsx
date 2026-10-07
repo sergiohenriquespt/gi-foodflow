@@ -5,7 +5,7 @@ import { C } from '../../constants/colors'
 import { DEFAULTS } from '../../constants/settings'
 import { getMeal, getNextMeal, toMin } from '../../utils/meal'
 import { fmtHM, fmtS, TODAY, WD, MN, addD } from '../../utils/date'
-import { ps, PRATO_PALETTE } from '../../constants/pratos'
+import { pratoColors } from '../../constants/pratos'
 import Avatar from '../../components/Avatar'
 import Icon from '../../components/Icon'
 import Logo from '../../components/Logo'
@@ -143,12 +143,12 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
         const f  = funcionarios.find(f=>f.id===c.funcionario_id)
         const em = ementas.find(e=>e.id===c.ementa_id)
         const pk = `prato${c.prato_num}`
-        return {id:c.id,validado_em:c.validado_em,nome:f?.nome||'—',foto:f?.foto,pratoLabel:em?.[pk+'_label'],pratoDesc:em?.[pk+'_desc']}
+        return {id:c.id,validado_em:c.validado_em,nome:f?.nome||'—',foto:f?.foto,pratoNum:c.prato_num,pratoLabel:em?.[pk+'_label'],pratoDesc:em?.[pk+'_desc']}
       }),
       ...vis.map(v => {
         const em = ementas.find(e=>e.id===v.ementa_id)
         const pk = `prato${v.prato_num}`
-        return {id:`v-${v.id}`,validado_em:v.registado_em,nome:'Visitantes',foto:null,quantidade:v.quantidade,isVisitante:true,pratoLabel:em?.[pk+'_label'],pratoDesc:em?.[pk+'_desc']}
+        return {id:`v-${v.id}`,validado_em:v.registado_em,nome:'Visitantes',foto:null,quantidade:v.quantidade,isVisitante:true,pratoNum:v.prato_num,pratoLabel:em?.[pk+'_label'],pratoDesc:em?.[pk+'_desc']}
       }),
     ].sort((a,b)=>new Date(b.validado_em)-new Date(a.validado_em)).slice(0,limit)
     setRecentes(rows)
@@ -161,9 +161,9 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     const {data,error} = await supabase.from('cantina_consumos').insert({funcionario_id:func.id,ementa_id:ementa.id,prato_num:pratoNum}).select().single()
     if(error) return
     const pk=`prato${pratoNum}`,pratoLabel=ementa[pk+'_label'],pratoDesc=ementa[pk+'_desc']
-    setRecentes(p=>[{id:data.id,validado_em:data.validado_em,nome:func.nome,foto:func.foto,pratoLabel,pratoDesc},...p].slice(0,parseInt(s.validacao_sidebar_num)||10))
+    setRecentes(p=>[{id:data.id,validado_em:data.validado_em,nome:func.nome,foto:func.foto,pratoNum,pratoLabel,pratoDesc},...p].slice(0,parseInt(s.validacao_sidebar_num)||10))
     loadContadores(ementa)
-    setStatus({type:'ok',func,pratoLabel,pratoDesc})
+    setStatus({type:'ok',func,pratoNum,pratoLabel,pratoDesc})
     setTimeout(reset,parseInt(s.validacao_tempo_ok)*1000)
   }
 
@@ -175,9 +175,9 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     const {data,error} = await insertVisitantes(ementaAtual.id, visitorPrato, qtd)
     if(error) return
     const pk=`prato${visitorPrato}`,pratoLabel=ementaAtual[pk+'_label'],pratoDesc=ementaAtual[pk+'_desc']
-    setRecentes(p=>[{id:`v-${data.id}`,validado_em:data.registado_em||new Date().toISOString(),nome:'Visitante(s)',foto:null,quantidade:qtd,isVisitante:true,pratoLabel,pratoDesc},...p].slice(0,parseInt(s.validacao_sidebar_num)||10))
+    setRecentes(p=>[{id:`v-${data.id}`,validado_em:data.registado_em||new Date().toISOString(),nome:'Visitante(s)',foto:null,quantidade:qtd,isVisitante:true,pratoNum:visitorPrato,pratoLabel,pratoDesc},...p].slice(0,parseInt(s.validacao_sidebar_num)||10))
     cancelVisitorMode()
-    setStatus({type:'visitor-ok',qtd,pratoLabel,pratoDesc})
+    setStatus({type:'visitor-ok',qtd,pratoNum:visitorPrato,pratoLabel,pratoDesc})
     setTimeout(reset,3000)
   }
 
@@ -191,7 +191,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
         const f  = funcionarios.find(f=>f.id===r.funcionario_id)
         const em = ementas.find(e=>e.id===r.ementa_id)
         const pk = `prato${r.prato_num}`
-        return {numero:f?.numero||'—', nome:f?.nome||'—', prato:em?.[pk+'_label']||'—', tipo:r.tipo}
+        return {numero:f?.numero||'—', nome:f?.nome||'—', prato:em?.[pk+'_label']||'—', num:r.prato_num, data:r.data, tipo:r.tipo}
       })
     const porNumero = (a,b) => (a.numero||'').localeCompare(b.numero||'', undefined, {numeric:true})
     const groups = marcRefeicao==='ambos'
@@ -205,13 +205,15 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     const agoraStr = `${String(agora.getDate()).padStart(2,'0')}/${String(agora.getMonth()+1).padStart(2,'0')}/${agora.getFullYear()} ${String(agora.getHours()).padStart(2,'0')}:${String(agora.getMinutes()).padStart(2,'0')}`
     const esc = v => String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
 
-    const pratoOrder = Object.keys(PRATO_PALETTE)
+    // Agrupa por prato_num; o nome é a label do slot na ementa mais recente do período
     const contarTotais = rows => {
-      const counts = {}
-      rows.forEach(r => { counts[r.prato] = (counts[r.prato]||0)+1 })
-      const ordenados = pratoOrder.filter(l=>counts[l]>0).map(l=>[l,counts[l]])
-      const restantes  = Object.keys(counts).filter(l=>!pratoOrder.includes(l)).map(l=>[l,counts[l]])
-      return [...ordenados,...restantes]
+      const by = {}
+      rows.forEach(r => {
+        const g = by[r.num] ||= {count:0,label:null,data:''}
+        g.count++
+        if (r.prato!=='—' && r.data>=g.data) { g.label=r.prato; g.data=r.data }
+      })
+      return Object.keys(by).sort((a,b)=>a-b).map(n=>[by[n].label||`Prato ${n}`, by[n].count])
     }
 
     const rowsHtml = groups.map(g => `
@@ -341,7 +343,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
     const ementa = ementas.find(e=>e.data===TODAY&&e.tipo===currentMeal)
     if(!ementa){setStatus({type:'error',msg:'Sem ementa para este momento'});setTimeout(reset,3000);return}
     const{data:exC}=await supabase.from('cantina_consumos').select('prato_num,validado_em').eq('funcionario_id',func.id).eq('ementa_id',ementa.id).maybeSingle()
-    if(exC){const pk=`prato${exC.prato_num}`;setStatus({type:'dup',func,pratoLabel:ementa[pk+'_label'],pratoDesc:ementa[pk+'_desc'],validadoEm:exC.validado_em});setTimeout(reset,parseInt(s.validacao_tempo_dup)*1000);return}
+    if(exC){const pk=`prato${exC.prato_num}`;setStatus({type:'dup',func,pratoNum:exC.prato_num,pratoLabel:ementa[pk+'_label'],pratoDesc:ementa[pk+'_desc'],validadoEm:exC.validado_em});setTimeout(reset,parseInt(s.validacao_tempo_dup)*1000);return}
     const{data:marc}=await supabase.from('cantina_marcacoes').select('prato_num').eq('funcionario_id',func.id).eq('ementa_id',ementa.id).maybeSingle()
     if(!marc){setStatus({type:'no-marc',func,ementa});return}
     confirmarConsumo(func,ementa,marc.prato_num)
@@ -516,9 +518,9 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
                 <div style={{fontSize:96,lineHeight:0.9,color:'#fff'}}>Bom apetite.</div>
               </div>
             </div>
-            <div style={{background:V.okCard,border:'1px solid rgba(52,211,153,0.3)',borderRadius:22,padding:'24px 28px',marginTop:6}}>
+            <div style={{background:V.okCard,border:'1px solid rgba(52,211,153,0.3)',borderLeft:`6px solid ${pratoColors(status.pratoNum).fg}`,borderRadius:22,padding:'24px 28px',marginTop:6}}>
               <div style={{display:'flex',alignItems:'center',gap:18,marginBottom:6}}>
-                <PratoTag label={status.pratoLabel} large/>
+                <PratoTag slot={status.pratoNum} label={status.pratoLabel} large/>
                 <span style={{fontSize:13,color:'rgba(232,249,236,0.5)',letterSpacing:'0.14em',fontWeight:700}}>· {isVisitor?'PRATO':'O TEU PRATO'}</span>
               </div>
               <div style={{fontSize:42,lineHeight:1.1,color:'#fff',marginTop:8}}>{status.pratoDesc}</div>
@@ -551,7 +553,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
                 </div>
               )}
               <div style={{display:'flex',alignItems:'center',gap:18,marginTop:10}}>
-                <PratoTag label={status.pratoLabel} large/>
+                <PratoTag slot={status.pratoNum} label={status.pratoLabel} large/>
                 <div style={{fontSize:32,color:'#fff',lineHeight:1.1}}>{status.pratoDesc}</div>
               </div>
             </div>
@@ -588,7 +590,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
                 return (
                   <button key={n} onClick={()=>confirmarConsumo(status.func,status.ementa,n)}
                     style={{textAlign:'left',cursor:'pointer',background:V.noBtn,border:'1px solid rgba(248,113,113,0.18)',borderRadius:14,padding:'12px 14px',display:'flex',flexDirection:'column',gap:8}}>
-                    <PratoTag label={label}/>
+                    <PratoTag slot={n} label={label}/>
                     <div style={{fontSize:14,lineHeight:1.3,color:'#fff',fontWeight:500,textWrap:'pretty'}}>{desc}</div>
                   </button>
                 )
@@ -612,7 +614,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
               const label = ementaAtual?.[`prato${n}_label`]
               const desc  = ementaAtual?.[`prato${n}_desc`]
               if(!label) return null
-              return <PratoBtn key={n} label={label} desc={desc} selected={visitorPrato===n} onClick={()=>setVisitorPrato(n)}/>
+              return <PratoBtn key={n} slot={n} label={label} desc={desc} selected={visitorPrato===n} onClick={()=>setVisitorPrato(n)}/>
             })}
           </div>
           {visitorPrato && (
@@ -671,9 +673,8 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
           {recentes.length===0
             ? <div style={{padding:32,textAlign:'center',color:C.textMuted,fontSize:13}}>Sem validações</div>
             : recentes.map((r,i) => {
-              const p = ps(r.pratoLabel)
               return (
-                <div key={r.id} style={{position:'relative',padding:'12px 34px 12px 20px',borderBottom:`1px solid ${p.border}`,display:'flex',alignItems:'center',gap:12,background:p.bg,outline:i===0?`1.5px solid ${p.border}`:'none',outlineOffset:'-1.5px'}}>
+                <div key={r.id} style={{padding:'12px 8px 12px 20px',borderBottom:`1px solid ${C.border}`,display:'flex',alignItems:'center',gap:12,background:i===0?V.panelHi:'transparent'}}>
                   {r.isVisitante
                     ? <div style={{width:36,height:36,borderRadius:'50%',background:C.surface2,border:`1px solid ${C.border}`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
                         <Icon name="users" size={18} color={C.textMuted}/>
@@ -685,13 +686,13 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
                       {r.isVisitante ? 'Visitantes' : r.nome}
                       {r.isVisitante && <span style={{fontSize:11,fontWeight:800,color:C.yellow}}>×{r.quantidade}</span>}
                     </div>
-                    <div style={{fontSize:11,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-                      <span style={{color:p.color,fontWeight:600}}>{r.pratoLabel}</span>
-                      <span style={{color:C.textMuted}}> · {fmtHM(r.validado_em)}</span>
+                    <div style={{fontSize:11,color:C.textMuted,marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                      {fmtHM(r.validado_em)} · {r.pratoDesc}
                     </div>
                   </div>
-                  <button onClick={()=>setAnularAlvo(r)}
-                    style={{position:'absolute',top:8,right:8,width:24,height:24,display:'flex',alignItems:'center',justifyContent:'center',background:'transparent',border:'none',borderRadius:6,color:C.textMuted,fontSize:14,lineHeight:1,cursor:'pointer'}}
+                  <span style={{flexShrink:0}}><PratoTag slot={r.pratoNum} label={r.pratoLabel?.slice(0,3)}/></span>
+                  <button onClick={()=>setAnularAlvo(r)} aria-label="Anular validação"
+                    style={{width:44,height:44,flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center',background:'transparent',border:'none',borderRadius:8,color:C.textMuted,fontSize:14,lineHeight:1,cursor:'pointer'}}
                     onTouchStart={e=>{e.currentTarget.style.color=C.danger}}
                     onTouchEnd={e=>{e.currentTarget.style.color=C.textMuted}}>
                     ✕
@@ -713,13 +714,13 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
         <div style={{borderTop:`1px solid ${C.border}`,background:V.panel,padding:'14px 28px',display:'flex',alignItems:'center',gap:14,flexShrink:0,position:'relative',zIndex:1}}>
           <div style={{fontSize:11,color:C.textMuted,fontWeight:700,letterSpacing:'0.14em',textTransform:'uppercase'}}>Faltam servir</div>
           {contadores.map(c => {
-            const p = ps(c.label)
+            const p = pratoColors(c.n)
             return (
               <div key={c.n} onClick={()=>setFaltamModal({n:c.n,label:c.label})}
-                style={{display:'flex',alignItems:'center',gap:12,padding:'8px 14px',background:p.bg,border:`1px solid ${p.border}`,borderRadius:99,flex:1,justifyContent:'space-between',cursor:'pointer'}}>
-                <PratoTag label={c.label}/>
+                style={{display:'flex',alignItems:'center',gap:12,padding:'8px 14px',background:p.bg,border:`1px solid ${p.bd}`,borderRadius:99,flex:1,justifyContent:'space-between',cursor:'pointer'}}>
+                <PratoTag slot={c.n} label={c.label}/>
                 <div style={{display:'flex',alignItems:'baseline',gap:4}}>
-                  <span style={{fontSize:28,fontWeight:900,color:p.color,lineHeight:1}}>{c.left}</span>
+                  <span style={{fontSize:28,fontWeight:900,color:p.fg,lineHeight:1}}>{c.left}</span>
                   <span style={{fontSize:12,color:C.textMuted}}>/ {c.total}</span>
                 </div>
               </div>
@@ -789,7 +790,7 @@ export default function TerminalValidacoes({funcionarios,ementas,settings,onBack
             <div onClick={e=>e.stopPropagation()}
               style={{width:480,maxWidth:'92vw',maxHeight:'90vh',background:V.panel,border:`1px solid ${C.border}`,borderRadius:20,padding:28,display:'flex',flexDirection:'column',gap:18}}>
               <div style={{display:'flex',alignItems:'center',gap:12,flexShrink:0}}>
-                <PratoTag label={faltamModal.label} large/>
+                <PratoTag slot={faltamModal.n} label={faltamModal.label} large/>
               </div>
               <div style={{fontSize:20,fontWeight:700,color:C.text,flexShrink:0}}>Faltam servir {lista.length} colaborador{lista.length===1?'':'es'}</div>
               <div style={{maxHeight:'calc(100vh - 240px)',overflowY:'auto',display:'flex',flexDirection:'column',gap:8}}>
