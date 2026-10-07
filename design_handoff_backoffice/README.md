@@ -12,6 +12,40 @@ O protótipo navegável está em `FoodFlow Redesign.html` na raiz do projeto de 
 
 ---
 
+## Regra comum: dados dinâmicos e cor por posição
+
+Aplica-se às 3 áreas (Marcações, Validações, Backoffice). **Implementar uma vez, partilhado.**
+
+1. **Textos dos pratos vêm sempre da ementa** (editável no Backoffice): label = `em.prato{n}_label`, descrição = `em.prato{n}_desc`. "Carne/Peixe/Dieta/Vegetariano" nos protótipos são só dados de exemplo. Nunca comparar com estes textos no código.
+2. **A cor depende da posição do prato (slot 1–4), não do texto da label.** Mudar o nome de um prato não altera a cor.
+3. **Horários das refeições vêm das Definições** (as mesmas chaves usadas por `getMeal(s)` / `getNextMeal(s)`). Nada de horas fixas no código.
+
+**Tokens** (copiar de `foodflow.css` para `src/styles/global.css` se ainda não existirem):
+```css
+:root{
+  --prato-carne-fg:#f4a49a; --prato-carne-bg:#2d1a1a; --prato-carne-bd:#5c2020;  /* slot 1 */
+  --prato-peixe-fg:#7ec8f0; --prato-peixe-bg:#0f1e2d; --prato-peixe-bd:#1a3d5c;  /* slot 2 */
+  --prato-dieta-fg:#6ee7b7; --prato-dieta-bg:#0d2218; --prato-dieta-bd:#1a5c3a;  /* slot 3 */
+  --prato-veg-fg:#fcd34d;   --prato-veg-bg:#1e1b08;   --prato-veg-bd:#4a420a;    /* slot 4 */
+}
+```
+Slot 1 coral · slot 2 azul · slot 3 verde · slot 4 amarelo.
+
+**Helper partilhado** — criar `src/constants/pratos.js`:
+```js
+const SLOTS = ['carne', 'peixe', 'dieta', 'veg']
+export const pratoSlotKey = n => SLOTS[(n - 1) % SLOTS.length]   // n = 1..4
+export const pratoColors = n => {
+  const k = pratoSlotKey(n)
+  return { fg: `var(--prato-${k}-fg)`, bg: `var(--prato-${k}-bg)`, bd: `var(--prato-${k}-bd)` }
+}
+```
+**`PratoTag`** passa a receber `slot` (número 1–4) para a cor e `label` só para o texto: `<PratoTag slot={n} label={em[\`prato${n}_label\`]} />`. Se existir um `ps(label)` ou mapeamento por texto no codebase, substituir por `pratoColors(n)` em todo o lado.
+
+**Contadores e históricos agrupam por `prato_num`**, nunca pela label.
+
+---
+
 ## Ficheiros a alterar
 
 | Ficheiro | Ação |
@@ -182,7 +216,7 @@ const [editingCell, setEditingCell] = useState(null)
   {/* Linha Almoço */}
   <div style={{ display:'grid', gridTemplateColumns:'70px repeat(5, 1fr)', gap:12,
     flex:1, minHeight:0 }}>
-    <MealLabel emoji="🌞" label="Almoço" hour="12:00 — 14:30" />
+    <MealLabel emoji="🌞" label="Almoço" hour={fmtHorario(s, 'A')} />  {/* horário das Definições */}
     {weekDates.map(d => {
       const em = ementas.find(e => e.data === d && e.tipo === 'A')
       const marcs = marcacoesAll.filter(m => m.ementa_id === em?.id).length
@@ -194,7 +228,7 @@ const [editingCell, setEditingCell] = useState(null)
   {/* Linha Jantar */}
   <div style={{ display:'grid', gridTemplateColumns:'70px repeat(5, 1fr)', gap:12,
     flex:1, minHeight:0 }}>
-    <MealLabel emoji="🌙" label="Jantar" hour="19:00 — 21:30" />
+    <MealLabel emoji="🌙" label="Jantar" hour={fmtHorario(s, 'J')} />
     {weekDates.map(d => {
       const em = ementas.find(e => e.data === d && e.tipo === 'J')
       const marcs = marcacoesAll.filter(m => m.ementa_id === em?.id).length
@@ -232,6 +266,8 @@ function DayHeader({ date }) {
   )
 }
 ```
+
+`fmtHorario(s, tipo)` → `"12:00 — 14:30"` a partir das Definições (mesmas chaves de `getMeal`). Criar em `src/lib/` se não existir; reutilizar no Terminal de Marcações.
 
 ### MealLabel (coluna esquerda, texto vertical)
 
@@ -286,7 +322,7 @@ function EmentaCell({ ementa, marcCount, onClick }) {
 
       {!isEmpty && pratos.map((p, i) => {
         if (!p.label) return null
-        const { bg, border: bd, color: fg } = ps(p.label)
+        const { bg, bd, fg } = pratoColors(i + 1)
         return (
           <div key={i} style={{
             display:'flex', alignItems:'center', gap:8, padding:'7px 9px', borderRadius:8,
@@ -297,7 +333,7 @@ function EmentaCell({ ementa, marcCount, onClick }) {
             <span style={{ fontSize:9.5, fontWeight:700, letterSpacing:'0.06em',
               padding:'2px 7px', borderRadius:4, background:bg, color:fg,
               border:`1px solid ${bd}`, minWidth:36, textAlign:'center', flexShrink:0 }}>
-              {p.label === 'Vegetariano' ? 'Veg' : p.label.slice(0,3)}
+              {p.label}  {/* texto da ementa, truncado por CSS (ellipsis) se for longo */}
             </span>
             <div style={{ flex:1, fontSize:11.5, color: p.desc ? C.text : C.textMuted,
               fontStyle: p.desc ? 'normal' : 'italic', lineHeight:1.3,
@@ -370,12 +406,12 @@ O `EmentaEditor` atual tem um card com inputs — dentro do modal fica bem com p
 
 // Cada slot de prato (substituir o layout actual)
 {[1,2,3,4].map(n => {
-  const { bg, border: bd, color: fg } = ps(f[`prato${n}_label`] ?? '')
+  const { bg, bd, fg } = pratoColors(n)
   return (
     <div key={n} style={{ marginBottom:10, padding:'12px 14px',
       background: C.surface2, borderRadius:12, border:`1px solid ${C.border}`,
       display:'flex', gap:10, alignItems:'center' }}>
-      <PratoTag label={f[`prato${n}_label`] ?? ''} />
+      <PratoTag slot={n} label={f[`prato${n}_label`] || `Prato ${n}`} />
       <input value={f[`prato${n}_label`] ?? ''}
         onChange={e => set(`prato${n}_label`, e.target.value)}
         placeholder="Tipo (Carne, Peixe…)"

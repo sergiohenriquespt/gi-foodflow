@@ -1,429 +1,182 @@
-# Handoff: Terminal de Marcações (dashboard)
+# Handoff: Terminal de Marcações v2 (touch-first)
 
-> **Parte 2 de 4** do redesign do FoodFlow. Cobre o **ecrã de dashboard do Terminal de Marcações** — o que o funcionário vê depois de fazer login para marcar refeições da semana. O Login & Seletor de Modo foram tratados na Parte 1.
+> **Parte 2 de 4** do redesign do FoodFlow. Substitui a versão anterior deste handoff. Cobre o **dashboard do Terminal de Marcações**, o ecrã que o funcionário vê depois do login para marcar refeições. Alvo: **POS touch de 15", 1366×768, sem scroll**.
 
----
+## Sobre os ficheiros de design
 
-## About the Design Files
+`screens-marcacoes-touch.jsx` → componente `MarcacoesTouch` é a **referência canónica** (protótipo React no browser, interativo). **Não é código de produção**: recria-o no codebase real usando os componentes e tokens que já existem. O protótipo navegável está em `FoodFlow Redesign.html`, secção 02, artboard "Marcações v2 — touch-first".
 
-Os ficheiros neste bundle são **referências de design em HTML/React-no-browser** (protótipos), **não código de produção para copiar tal e qual**. A tarefa é recriar o design no codebase real (`gi-foodflow/`).
+## Regra comum: dados dinâmicos e cor por posição
 
-O ficheiro de referência canónico é `screens-marcacoes.jsx` → componente `MarcacoesArrojada`. (Ignorar `MarcacoesRefinada` — exploração descartada.)
+Aplica-se às 3 áreas (Marcações, Validações, Backoffice). **Implementar uma vez, partilhado.**
 
-O protótipo navegável completo está em `FoodFlow Redesign.html` na raiz do projeto de design (secção **02 · Marcações**) — abre em focus mode para ver ao pixel.
+1. **Textos dos pratos vêm sempre da ementa** (editável no Backoffice): label = `em.prato{n}_label`, descrição = `em.prato{n}_desc`. "Carne/Peixe/Dieta/Vegetariano" nos protótipos são só dados de exemplo. Nunca comparar com estes textos no código.
+2. **A cor depende da posição do prato (slot 1–4), não do texto da label.** Mudar o nome de um prato não altera a cor.
+3. **Horários das refeições vêm das Definições** (as mesmas chaves usadas por `getMeal(s)` / `getNextMeal(s)`). Nada de horas fixas no código.
 
----
-
-## Ficheiro a alterar
-
-**`src/screens/marcacoes/TerminalMarcacoes.jsx`** — apenas o bloco `step === 'dashboard'` (a parte abaixo do `if (step==='pin') {…}`). O `LoginShell`, os passos `numero`/`pin`, e toda a lógica Supabase **não se tocam**.
-
-Opcionalmente: criar **`src/components/PratoCard.jsx`** (novo componente) para substituir `PratoBtn` dentro do dashboard.
-
----
-
-## Visão Geral da Mudança
-
-| Aspeto | Hoje | Redesign |
-|---|---|---|
-| Navegação por dias | Sidebar esquerda 200px, lista vertical | **Strip horizontal** em cima, chips com dia grande |
-| Refeições | Cards empilhados, scroll vertical | **Dois blocos lado a lado** (almoço + jantar), sem scroll |
-| Seleção de prato | Lista de botões (`PratoBtn`) | **Grelha 2×2** de cards (`PratoCard`) |
-| Topbar | Logo + avatar + nome + Sair | Logo + **saudação editorial** + avatar + nome + Sair |
-| Alinhamento geral | Denso, scroll | Tudo visível num ecrã, sem scroll |
-
----
-
-## Layout (1366×768, sem scroll)
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  TOPBAR  (padding 18px 28px)                            │
-│  Logo │ sep │ "Olá, Sofia" italic 26px + meta 12px     │
-│                              Avatar + nome + Sair →     │
-├─────────────────────────────────────────────────────────┤
-│  DAY STRIP  (padding 20px 28px 10px)                   │
-│  eyebrow "Semana de …" · totais · btn próx semana      │
-│  [ Chip Seg ] [ Chip Ter ] [ Chip Qua ] [●Chip Qui] … │
-├──────────────────────┬──────────────────────────────────┤
-│  MEAL BLOCK — Almoço │  MEAL BLOCK — Jantar             │
-│  🌞 Almoço italic 36│  🌙 Jantar italic 36px           │
-│  ┌──────┬──────┐    │  ┌──────┬──────┐                 │
-│  │Prato │Prato │    │  │Prato │Prato │                 │
-│  │  A   │  B   │    │  │  A   │  B   │                 │
-│  ├──────┼──────┤    │  ├──────┼──────┤                 │
-│  │Prato │Prato │    │  │Prato │Prato │                 │
-│  │  C   │  D   │    │  │  C   │  D   │                 │
-│  └──────┴──────┘    │  └──────┴──────┘                 │
-└──────────────────────┴──────────────────────────────────┘
-```
-
----
-
-## Implementação detalhada
-
-### 1. Topbar
-
-```jsx
-<div style={{
-  padding: '18px 28px 0',
-  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  flexShrink: 0
-}}>
-  {/* Esquerda */}
-  <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
-    <Logo size="sm" showSub={false} />
-    <div style={{ width: 1, height: 28, background: C.border }} />
-    <div>
-      <div style={{ fontStyle: 'italic', fontSize: 26, lineHeight: 1, color: C.text }}>
-        Olá, {func.nome.split(' ')[0]}   {/* só o primeiro nome */}
-      </div>
-      <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4 }}>
-        O que vais comer hoje?
-      </div>
-    </div>
-  </div>
-
-  {/* Direita */}
-  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-    <div style={{ textAlign: 'right' }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{func.nome}</div>
-      <div style={{ fontSize: 11, color: C.textMuted }}>Nº {func.numero}</div>
-    </div>
-    <Avatar nome={func.nome} foto={func.foto} size={42} />
-    <button onClick={logout} style={{
-      height: 42, padding: '0 16px', background: C.surface,
-      border: `1px solid ${C.border}`, borderRadius: 99,
-      color: C.textSub, fontSize: 13, fontWeight: 600,
-      display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer'
-    }}>
-      <Icon name="logout" size={15} /> Sair
-    </button>
-  </div>
-</div>
-```
-
----
-
-### 2. Day Strip
-
-Substitui a sidebar. Os **dias disponíveis** vêm da mesma lógica de `days` já existente (slice de 14 dias úteis a partir de hoje, respeitando `serveFds` e `bloqueado`). Mostra-se até **5 dias** (semana corrente); o botão "Próxima semana" avança o offset.
-
-**Gestão de estado — semana offset:**
-```jsx
-const [weekOffset, setWeekOffset] = useState(0)
-// weekDays = days.slice(weekOffset * 5, weekOffset * 5 + 5)
-// Botão "Próxima semana": setWeekOffset(o => o + 1) se houver dias além
-// Botão "← Semana anterior": setWeekOffset(o => Math.max(0, o - 1))
-```
-
-**Eyebrow da strip:**
-```jsx
-<div style={{ fontSize: 11, fontWeight: 700, color: C.textMuted,
-  letterSpacing: '0.14em', textTransform: 'uppercase' }}>
-  Semana de {fmtF(weekDays[0])} a {fmtF(weekDays[weekDays.length-1])}
-</div>
-```
-À direita do eyebrow, totais `N marcadas · N por marcar` + botão "→ Próxima semana".
-
-**DayChip:**
-```jsx
-function DayChip({ d, sel, marcCount, isToday, bloqueado, onClick }) {
-  return (
-    <button onClick={onClick} style={{
-      cursor: 'pointer', textAlign: 'left',
-      background: sel ? C.yellow : C.surface,
-      color: sel ? C.bg : C.text,
-      border: `1.5px solid ${sel ? C.yellow : C.border}`,
-      borderRadius: 14, padding: '14px 18px',
-      display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6,
-      minWidth: 132, flexShrink: 0, position: 'relative'
-    }}>
-      {/* Número grande + label do dia */}
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-        <span style={{ fontSize: 40, lineHeight: 0.85, fontWeight: 400 }}>
-          {new Date(d + 'T12:00:00').getDate()}
-        </span>
-        <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.12em',
-          color: sel ? 'rgba(26,32,40,0.6)' : C.textMuted }}>
-          {WD[new Date(d + 'T12:00:00').getDay()].slice(0,3).toUpperCase()}
-        </span>
-      </div>
-      {/* Contador de marcações */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5,
-        fontSize: 12, color: sel ? 'rgba(26,32,40,0.7)' : C.textSub }}>
-        {marcCount > 0
-          ? <><span style={{ width: 7, height: 7, borderRadius: '50%',
-              background: sel ? C.bg : C.success }} />
-              {marcCount} marcado{marcCount > 1 ? 's' : ''}</>
-          : <span style={{ fontStyle: 'italic' }}>—</span>}
-      </div>
-      {/* Badge HOJE */}
-      {isToday && (
-        <span style={{
-          position: 'absolute', top: -8, right: 10,
-          fontSize: 9, fontWeight: 800, letterSpacing: '0.16em',
-          background: sel ? C.bg : C.yellow,
-          color: sel ? C.yellow : C.bg,
-          padding: '3px 8px', borderRadius: 4
-        }}>HOJE</span>
-      )}
-    </button>
-  )
+**Tokens** (copiar de `foodflow.css` para `src/styles/global.css` se ainda não existirem):
+```css
+:root{
+  --prato-carne-fg:#f4a49a; --prato-carne-bg:#2d1a1a; --prato-carne-bd:#5c2020;  /* slot 1 */
+  --prato-peixe-fg:#7ec8f0; --prato-peixe-bg:#0f1e2d; --prato-peixe-bd:#1a3d5c;  /* slot 2 */
+  --prato-dieta-fg:#6ee7b7; --prato-dieta-bg:#0d2218; --prato-dieta-bd:#1a5c3a;  /* slot 3 */
+  --prato-veg-fg:#fcd34d;   --prato-veg-bg:#1e1b08;   --prato-veg-bd:#4a420a;    /* slot 4 */
 }
 ```
+Slot 1 coral · slot 2 azul · slot 3 verde · slot 4 amarelo.
 
-**Container da strip:**
-```jsx
-<div style={{ display: 'flex', gap: 12, overflow: 'hidden' }}>
-  {weekDays.map(d => (
-    <DayChip key={d}
-      d={d} sel={selDay === d} isToday={d === TODAY}
-      bloqueado={bloqueado && d === TODAY}
-      marcCount={ementas.filter(e => e.data === d && getM(e.id)).length}
-      onClick={() => setSelDay(d)}
-    />
-  ))}
-</div>
-```
-
----
-
-### 3. Meal Blocks (lado a lado)
-
-O container dos dois blocos:
-```jsx
-<div style={{ flex: 1, display: 'flex', gap: 16, padding: '14px 28px 24px', minHeight: 0 }}>
-  {['A', 'J'].map(tipo => {
-    const em = dayEm.find(e => e.tipo === tipo)
-    if (!em) return null
-    const marc = getM(em.id)
-    const readonly = selDay === TODAY && bloqueado
-    const pratos = [1,2,3,4].map(n => ({
-      n, label: em[`prato${n}_label`], desc: em[`prato${n}_desc`]
-    })).filter(p => p.label)
-    return (
-      <MealBlock key={tipo} tipo={tipo} em={em} marc={marc}
-        pratos={pratos} readonly={readonly}
-        onMarcar={n => marcar(em, n)}
-        onCancelar={() => cancelar(em.id)} />
-    )
-  })}
-  {dayEm.length === 0 && (
-    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: C.textMuted, fontSize: 15 }}>
-      Sem ementa disponível para este dia
-    </div>
-  )}
-</div>
-```
-
-**MealBlock:**
-```jsx
-function MealBlock({ tipo, marc, pratos, readonly, onMarcar, onCancelar }) {
-  const emoji = tipo === 'A' ? '🌞' : '🌙'
-  const label = tipo === 'A' ? 'Almoço' : 'Jantar'
-  const hour  = tipo === 'A' ? '12:00 — 14:30' : '19:00 — 21:30'
-
-  return (
-    <div style={{
-      background: C.surface, border: `1px solid ${C.border}`,
-      borderRadius: 22, padding: '22px 24px',
-      flex: 1, minHeight: 0,
-      display: 'flex', flexDirection: 'column'
-    }}>
-      {/* Cabeçalho */}
-      <div style={{ display: 'flex', alignItems: 'baseline',
-        justifyContent: 'space-between', marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-          <span style={{ fontSize: 30 }}>{emoji}</span>
-          <span style={{ fontStyle: 'italic', fontSize: 36, color: C.text, lineHeight: 1 }}>
-            {label}
-          </span>
-          <span style={{ fontSize: 13, color: C.textMuted, marginLeft: 4 }}>· {hour}</span>
-        </div>
-
-        {/* Status / ações */}
-        {readonly ? (
-          marc
-            ? <span style={{ fontSize: 13, color: C.success, fontWeight: 700,
-                display: 'flex', alignItems: 'center', gap: 6 }}>
-                <Icon name="check" size={14} color={C.success} /> Marcado
-              </span>
-            : <span style={{ fontSize: 13, color: C.textMuted, fontStyle: 'italic' }}>
-                Marcações encerradas
-              </span>
-        ) : marc ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 7,
-              background: C.successBg, border: `1px solid ${C.success}33`,
-              borderRadius: 99, padding: '6px 14px',
-              fontSize: 13, fontWeight: 700, color: C.success
-            }}>
-              <Icon name="check" size={14} color={C.success} stroke={2.4} /> Marcado
-            </span>
-            {/* "Trocar prato" = cancela a marcação atual para o user escolher outro */}
-            <button onClick={onCancelar} style={{
-              fontSize: 13, fontWeight: 600, color: C.textSub,
-              background: 'transparent', border: `1px solid ${C.border}`,
-              borderRadius: 99, padding: '6px 14px', cursor: 'pointer'
-            }}>Trocar prato</button>
-          </div>
-        ) : (
-          <span style={{ fontSize: 13, color: C.textMuted, fontStyle: 'italic' }}>
-            Escolhe um prato
-          </span>
-        )}
-      </div>
-
-      {/* Grelha 2×2 de pratos */}
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr',
-        gap: 12, flex: 1, alignContent: 'stretch',
-        opacity: readonly && !marc ? 0.5 : 1
-      }}>
-        {pratos.map(({ n, label: pratoLabel, desc }) => (
-          <PratoCard key={n}
-            label={pratoLabel} desc={desc}
-            selected={marc?.prato_num === n}
-            disabled={readonly}
-            onClick={readonly ? undefined : () => onMarcar(n)} />
-        ))}
-      </div>
-    </div>
-  )
+**Helper partilhado** — criar `src/constants/pratos.js`:
+```js
+const SLOTS = ['carne', 'peixe', 'dieta', 'veg']
+export const pratoSlotKey = n => SLOTS[(n - 1) % SLOTS.length]   // n = 1..4
+export const pratoColors = n => {
+  const k = pratoSlotKey(n)
+  return { fg: `var(--prato-${k}-fg)`, bg: `var(--prato-${k}-bg)`, bd: `var(--prato-${k}-bd)` }
 }
 ```
+**`PratoTag`** passa a receber `slot` (número 1–4) para a cor e `label` só para o texto: `<PratoTag slot={n} label={em[\`prato${n}_label\`]} />`. Se existir um `ps(label)` ou mapeamento por texto no codebase, substituir por `pratoColors(n)` em todo o lado.
+
+**Contadores e históricos agrupam por `prato_num`**, nunca pela label.
 
 ---
 
-### 4. PratoCard (novo componente)
-
-Criar em `src/components/PratoCard.jsx`. Substitui `PratoBtn` **dentro do dashboard das Marcações** (o `PratoBtn` mantém-se para outros usos).
-
-```jsx
-// src/components/PratoCard.jsx
-import { C } from '../constants/colors'
-import PratoBtn from './PratoBtn'   // reutiliza a tag de categoria se existir
-
-export default function PratoCard({ label, desc, selected, disabled, onClick }) {
-  // label = 'Carne' | 'Peixe' | 'Dieta' | 'Veg' (mesmo sistema de hoje)
-  // Mapeamento de cores da tag igual ao PratoBtn existente
-  return (
-    <button onClick={onClick} disabled={disabled} style={{
-      cursor: disabled ? 'default' : 'pointer',
-      textAlign: 'left',
-      background: selected ? `${C.yellow}1F` : C.surface2,
-      border: `1.5px solid ${selected ? C.yellow : C.border}`,
-      borderRadius: 18,
-      padding: '18px 20px',
-      display: 'flex', flexDirection: 'column', gap: 12,
-      position: 'relative', overflow: 'hidden',
-      transition: 'border-color 0.15s'
-    }}>
-      {/* Linha topo: tag de categoria + check */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {/* Reutilizar o mesmo chip de categoria do PratoBtn */}
-        <span style={{
-          fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase',
-          padding: '4px 10px', borderRadius: 6,
-          /* cores por categoria — igual ao PratoBtn atual */
-          background: pratoTagBg(label), color: pratoTagFg(label)
-        }}>{label}</span>
-        {selected && (
-          <span style={{
-            width: 28, height: 28, borderRadius: '50%',
-            background: C.yellow, color: C.bg,
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
-          }}>✓</span>
-        )}
-      </div>
-      {/* Descrição */}
-      <div style={{ fontSize: 15, lineHeight: 1.35, fontWeight: 500,
-        color: C.text, textWrap: 'pretty' }}>
-        {desc}
-      </div>
-    </button>
-  )
-}
-
-// Helpers (iguais ao sistema de cores de PratoBtn/PratoTag já existente no codebase)
-function pratoTagBg(label) {
-  const m = { Carne:'#3d1f0d', Peixe:'#0d2535', Dieta:'#2d1515', Veg:'#0d2e1a' }
-  return m[label] ?? '#1e242d'
-}
-function pratoTagFg(label) {
-  const m = { Carne:'#fb923c', Peixe:'#38bdf8', Dieta:'#f87171', Veg:'#34d399' }
-  return m[label] ?? '#94a3b8'
-}
-```
-
-> **Nota:** se o codebase já tem um mapeamento de cores por categoria (em `PratoBtn.jsx` ou `constants/`), usa-o diretamente em vez de duplicar. O que importa é que `PratoCard` fique com o **layout de card** (coluna flex, tag em cima, descrição em baixo) em vez do layout de linha do `PratoBtn`.
-
----
-
-## Estados & Comportamento
-
-### readonly (bloquear_dia_próprio)
-Quando `s.bloquear_dia_proprio === 'true'` e `selDay === TODAY`:
-- Cards de prato ficam `opacity: 0.5` e `pointer-events: none` (implementado via `disabled` e `opacity` no container da grelha).
-- Se já marcou: mostra pílula "Marcado" mas sem botão "Trocar prato".
-- Se não marcou: mostra "Marcações encerradas" no header.
-- ⚠️ Esta lógica já existe hoje; não muda — só precisa de ser aplicada nos novos componentes.
-
-### Navegação por semanas
-- `weekOffset` (state) controla qual fatia de 5 dias mostrar: `days.slice(weekOffset*5, weekOffset*5+5)`.
-- Botão "Próxima semana" aparece sempre que `days.length > (weekOffset+1)*5`.
-- Botão "← Semana anterior" aparece quando `weekOffset > 0`.
-- Ao mudar de semana, se o `selDay` atual não estiver na nova semana, muda para o primeiro dia da nova janela.
-
-### Sem ementa / dia sem dados
-- Se `dayEm.length === 0`: mostrar mensagem centrada "Sem ementa disponível para este dia" — igual a hoje.
-- Se só existe almoço (sem jantar) ou vice-versa: o bloco do tipo ausente simplesmente não renderiza (o `if (!em) return null` já trata isto).
-
----
-
-## Design Tokens
-
-Todos em `src/constants/colors.js` — não inventar hex:
-
-| Token | Uso neste ecrã |
-|---|---|
-| `C.bg` | fundo full-bleed |
-| `C.surface` | topbar (fundo), meal blocks |
-| `C.surface2` | PratoCard não selecionado, DayChip |
-| `C.border` | bordas de chips/cards/botões |
-| `C.yellow` | DayChip selecionado, PratoCard selecionado, pílula "Marcado" |
-| `C.bg` (sobre yellow) | texto sobre fundo mustard |
-| `C.text` | títulos e texto primário |
-| `C.textSub` | meta, botão Sair |
-| `C.textMuted` | eyebrows, hora, placeholder |
-| `C.success` / `C.successBg` | pílula "Marcado" |
-| `C.danger` / `C.dangerBg` | não usado neste ecrã |
-
-**Tipografia:** os rótulos de refeição "Almoço" / "Jantar" são `font-style: italic`, `font-size: 36px`, `font-weight: 400` (Outfit). O número do dia nos chips é `font-size: 40px`, `font-weight: 400` (Outfit). Todos os outros textos: Outfit regular (body weight).
-
-**Raios:** `14px` (DayChip), `18px` (PratoCard), `22px` (MealBlock), `99px` (pílulas de estado).
-
-**Transições:** `border-color 0.15s`, `background 0.15s` nos cards interativos. Sem bounce.
-
----
-
-## Ficheiros a criar/alterar
+## Ficheiros a alterar
 
 | Ficheiro | Ação |
 |---|---|
-| `src/screens/marcacoes/TerminalMarcacoes.jsx` | **Substituir** o bloco `step === 'dashboard'` (tudo a partir de `return (` dentro desse bloco). LoginShell e passos numero/pin não se tocam. Adicionar `weekOffset` ao state. |
-| `src/components/PratoCard.jsx` | **Criar** novo componente (ver secção 4). |
+| `src/screens/marcacoes/TerminalMarcacoes.jsx` | Substituir **só** o bloco `step === 'dashboard'`. Login (`numero`/`pin`) e lógica Supabase não se tocam. |
+| `src/components/PratoCard.jsx` | Criar (ou reescrever, se já existir da versão anterior). |
+| `src/components/Icon.jsx` | Garantir glifos `lock`, `chev-l`, `chev-r`, `check`, `x`, `logout` (Lucide, stroke 1.8). |
 
----
+## Resolução
 
-## Ficheiros de Referência (neste bundle)
+Tem de funcionar em **1366×768 e 1024×768** (resoluções comuns em POS de 15"). Abaixo de 1200px de largura: esconder o logo na topbar, coluna de etiqueta da refeição a 170px, descrição do prato a 17px e etiqueta "Escolhido" só com ícone. O protótipo tem os dois artboards.
 
+## Princípios touch (não negociáveis)
+
+- **Alvo mínimo 56px** em qualquer elemento tocável. Pratos ~250×260px, dias 100px de altura, setas 64px de largura, "Terminar" 60px.
+- **Um toque = uma ação.** Tocar num prato marca; tocar no mesmo prato desmarca. Sem confirmações modais.
+- **Tudo visível num ecrã**, sem scroll.
+- **Sem hover states como única pista** (não existe hover em touch). O estado selecionado tem de ser óbvio só por cor/borda/etiqueta.
+- Texto mínimo 14px; descrições de prato a 19px.
+
+## Layout (1366×768)
+
+```
+┌──────────────────────────────────────────────────────────┐
+│ TOPBAR 84px: Logo | Avatar 52 · "Olá, Sofia" · meta      │  [Terminar]
+├──────────────────────────────────────────────────────────┤
+│ DAY STRIP 100px: [‹] [QUI 05 HOJE ●●] [SEX 06] … [›]     │
+├────────────┬──────────┬──────────┬──────────┬────────────┤
+│ 🌞 Almoço  │ CARNE    │ PEIXE    │ DIETA    │ VEGETARIANO│  flex:1
+│ 12:00–14:30│ desc     │ desc     │ desc     │ desc       │
+│ [Desmarcar]│          │[Escolhido]          │            │
+├────────────┼──────────┼──────────┼──────────┼────────────┤
+│ 🌙 Jantar  │   …      │   …      │   …      │   …        │  flex:1
+└────────────┴──────────┴──────────┴──────────┴────────────┘
+                    [ ✓ Almoço marcado · Peixe ]  ← toast
+```
+
+Contentor raiz: `height:100vh; background:C.bg; display:flex; flex-direction:column; overflow:hidden; position:relative`.
+
+### 1. Topbar (`height:84; padding:0 24px; flex; justify-content:space-between`)
+- Esquerda (`gap:20`): `<Logo size="sm" showSub={false}/>` · divisor `1×40 C.border` · `<Avatar nome foto size={52}/>` · bloco:
+  - `Olá, {primeiro nome}`: 24px, 700
+  - `Nº {func.numero} · {N} refeições marcadas`: 14px, `C.textSub` (N = marcações futuras do funcionário)
+- Direita: botão **Terminar** (`height:60; padding:0 28px; background:C.surface; border:2px solid C.border2; radius:14; font 18px/700`, ícone `logout` 22px) → `logout()`.
+
+### 2. Week strip (`height:108; padding:0 20px; flex; gap:8`)
+- **Mostra sempre a semana de trabalho, segunda a sexta** (5 chips fixos). Não é uma janela deslizante a partir de hoje.
+  ```js
+  const monday = d => { const x = new Date(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x }
+  const weekDays = Array.from({length:5}, (_, i) => addD(fmtISO(monday(TODAY)), weekOffset*7 + i))
+  ```
+- Seta ‹ e › (`width:60; C.surface; border 2px C.border2; radius:16`, ícone 30px): `weekOffset ± 1`. ‹ desativada (`opacity .3`) em `weekOffset === 0`; › desativada na última semana com ementas disponíveis.
+- Ao mudar de semana, selecionar o primeiro dia não passado (ou segunda, se for semana futura).
+- **Dias passados** da semana atual aparecem esbatidos (`opacity .5`), podem ser tocados para consulta, mas ficam só de leitura.
+- **DayChip**: `flex:1; min-width:0; radius:16; padding:10px 12px; display:flex; flex-direction:column; justify-content:space-between; overflow:hidden`.
+  - Selecionado: `background:C.yellow; color:C.bg; border:2px solid C.yellow`. Restantes: `C.surface`, `C.text`, `border 2px C.border2`.
+  - **Linha 1:** `04` (34px/700) + `QUI` (14px/800, letter-spacing .08em, opacity .6–.75) à esquerda; badge **HOJE** à direita (10px/800, `padding:3px 6px; radius:6`; invertida no chip selecionado).
+  - **Linha 2:** dois indicadores **A / J** lado a lado, cada um `flex:1; height:30; radius:8`, **dentro do chip** (nunca posicionados em cima da margem):
+    - Marcado: fundo `C.success` (ou `C.bg` no chip selecionado) + letra + ícone `check` (ou `lock` se bloqueado).
+    - Por marcar: só borda 2px (`C.border2`), letra em `C.textMuted`.
+  - Este layout em coluna aguenta chips estreitos (~150px em ecrãs 1024×768).
+- Tocar no chip → `setSelDay(d)`.
+
+### 3. Linhas de refeição (`flex:1; padding:16px 24px 24px; flex column; gap:14`)
+Uma linha por tipo (`A` Almoço 🌞, `J` Jantar 🌙). **O horário de cada refeição vem das Definições** (as mesmas chaves que `getMeal(s)`/`getNextMeal(s)` já usam no Terminal de Validações), formatado `HH:MM – HH:MM`. Nunca escrever horas fixas no código. Se a ementa do tipo não existir para o dia, não renderizar a linha. Se o dia não tem ementa: mensagem centrada `Sem ementa para este dia.` (20px, `C.textSub`).
+
+Cada linha: `display:grid; grid-template-columns: 210px repeat(4, minmax(0,1fr)); gap:12; flex:1; min-height:0`.
+
+**Etiqueta da refeição** (1ª coluna; `background:C.bg` ou um tom abaixo de `C.surface`; `border:1px solid C.border; radius:18; padding:18; flex column; space-between`):
+- Topo: emoji 30px · label 30px/700 · horário (das Definições) 15px `C.textSub`.
+- Fundo, um de três estados:
+  - **Dia passado**: ícone `lock` 18px + `Dia já passou` (14px/600, `C.textSub`).
+  - **Bloqueado** (`selDay===TODAY && bloqueado`): ícone `lock` 18px + `Já não é possível alterar` (14px/600, `C.textSub`).
+  - **Marcado**: botão **Desmarcar** (`height:56; full width; transparent; border 2px C.border2; radius:12; 16px/700`, ícone `x`) → `cancelar(em.id)`.
+  - **Por marcar**: anel âmbar 10px + `Por marcar` (15px/700, âmbar: usar o token de aviso existente ou `#fbbf24`).
+
+**PratoCard** (colunas 2–5, uma por `prato{n}_label` preenchido):
+```jsx
+<button onClick={onClick} disabled={locked} style={{
+  position:'relative', textAlign:'left', padding:0, overflow:'hidden',
+  borderRadius:18, display:'flex', flexDirection:'column', minHeight:0,
+  background: selected ? 'rgba(224,203,75,0.10)' : C.surface,
+  border: `3px solid ${selected ? C.yellow : C.border}`,
+  opacity: dim ? (locked ? 0.35 : 0.55) : 1,
+  transition:'opacity .15s, border-color .15s, background .15s'
+}}>
+  {/* faixa de categoria */}
+  <div style={{ height:54, background:catBg, borderBottom:`1px solid ${catBd}`, color:catFg,
+    display:'flex', alignItems:'center', gap:10, padding:'0 18px' }}>
+    <PratoGlyph size={22}/>  {/* ícone da categoria */}
+    <span style={{ fontSize:16, fontWeight:800, letterSpacing:'0.08em', textTransform:'uppercase' }}>{label}</span>
+  </div>
+  <div style={{ flex:1, padding:'16px 18px', fontSize:19, fontWeight:500, lineHeight:1.3, color:C.text }}>{desc}</div>
+  {selected && <span style={{ position:'absolute', right:14, bottom:14, height:44, padding:'0 16px 0 10px',
+    borderRadius:99, background:C.yellow, color:C.bg, display:'inline-flex', alignItems:'center', gap:6,
+    fontSize:15, fontWeight:800 }}><Icon name={locked?'lock':'check'} size={20}/>Escolhido</span>}
+</button>
+```
+- `selected` = `getM(em.id)?.prato_num === n`. `dim` = há outro prato escolhido nesta refeição.
+- **Textos do prato vêm sempre da ementa** (editável no Backoffice): faixa = `em.prato{n}_label`, descrição = `em.prato{n}_desc`. Os nomes "Carne/Peixe/Dieta/Vegetariano" do protótipo são só dados de exemplo.
+- **Cor da faixa por posição**: `pratoColors(n)` (ver "Regra comum"). O ícone da faixa segue a mesma regra (por slot).
+- Se `prato{n}_label` estiver vazio, não renderizar o card (a grelha mantém 4 colunas; o espaço fica vazio).
+- Toast: usar a label da ementa (`Almoço marcado · {em.prato{n}_label}`).
+- `onClick`: se escolhido → `cancelar(em.id)`; senão → `marcar(em, n)` (troca diretamente se já havia outro prato).
+
+### 4. Toast de confirmação
+Após marcar/desmarcar: `position:absolute; left:50%; bottom:36; transform:translateX(-50%); background:C.text; color:C.bg; radius:14; padding:16px 26px; 18px/700; box-shadow:0 16px 40px rgba(0,0,0,.45)`, ícone `check`. Texto: `Almoço marcado · Peixe` / `Jantar desmarcado`. Desaparece aos 2,2s. Em erro do Supabase: mesmo toast com `Erro ao guardar` em `C.danger`.
+
+## Estado
+
+Reutiliza o existente (`selDay`, `ementas`, `getM`, `marcar`, `cancelar`, `bloqueado`, `TODAY`, `func`). Adicionar só:
+```js
+const [weekOffset, setWeekOffset] = useState(0)
+const [toast, setToast] = useState(null)   // { msg, error? }
+```
+Ao mudar de janela, se `selDay` sair da janela, selecionar o primeiro dia da nova janela.
+
+## Tokens (`src/constants/colors.js`, sem hex soltos exceto os indicados)
+
+| Token | Uso |
+|---|---|
+| `C.bg` | fundo; texto sobre mustard |
+| `C.surface` | cards de prato, chips, botões |
+| `C.border` / `C.border2` | bordas de cards / bordas de botões e chips |
+| `C.yellow` | dia selecionado, prato escolhido, etiqueta "Escolhido" |
+| `C.text` / `C.textSub` / `C.textMuted` | primário / secundário / letras A-J |
+| `C.success` | indicador de refeição marcada |
+| âmbar (`#fbbf24` ou token de aviso) | "Por marcar" |
+
+**Tipografia:** Outfit (carregada na Parte 1). Pesos 600–800 em tudo o que é estrutural; **sem itálicos finos** neste ecrã (legibilidade em POS). **Raios:** 12 (botões pequenos), 14–16 (chips/botões), 18 (cards).
+
+## Copy (PT-PT, "tu")
+`Olá, {nome}` · `{N} refeições marcadas` · `HOJE` · `Por marcar` · `Desmarcar` · `Escolhido` · `Já não é possível alterar` · `Terminar` · `Sem ementa para este dia.` · toasts acima.
+
+## Ficheiros neste bundle
 | Ficheiro | Conteúdo |
 |---|---|
-| `screens-marcacoes.jsx` | Design canónico. `MarcacoesArrojada` é a versão final. |
-| `foodflow-shared.jsx` | Primitivos do mock (mapeamento para componentes reais). |
-| `gi-tokens.css` | Tokens completos do design system GI. |
-| `foodflow.css` | Extensões FoodFlow (cores de categoria de prato, keyframes). |
+| `screens-marcacoes-touch.jsx` | **Canónico.** `MarcacoesTouch`. |
+| `foodflow-shared.jsx` | Primitivos do mock (`Icon`, `PratoGlyph`, `FF_DARK`, dados demo). |
+| `gi-tokens.css` / `foodflow.css` | Tokens GI e cores por slot `--prato-*`. |

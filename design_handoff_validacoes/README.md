@@ -14,6 +14,40 @@ O protótipo navegável está em `FoodFlow Redesign.html` na raiz do projeto de 
 
 ---
 
+## Regra comum: dados dinâmicos e cor por posição
+
+Aplica-se às 3 áreas (Marcações, Validações, Backoffice). **Implementar uma vez, partilhado.**
+
+1. **Textos dos pratos vêm sempre da ementa** (editável no Backoffice): label = `em.prato{n}_label`, descrição = `em.prato{n}_desc`. "Carne/Peixe/Dieta/Vegetariano" nos protótipos são só dados de exemplo. Nunca comparar com estes textos no código.
+2. **A cor depende da posição do prato (slot 1–4), não do texto da label.** Mudar o nome de um prato não altera a cor.
+3. **Horários das refeições vêm das Definições** (as mesmas chaves usadas por `getMeal(s)` / `getNextMeal(s)`). Nada de horas fixas no código.
+
+**Tokens** (copiar de `foodflow.css` para `src/styles/global.css` se ainda não existirem):
+```css
+:root{
+  --prato-carne-fg:#f4a49a; --prato-carne-bg:#2d1a1a; --prato-carne-bd:#5c2020;  /* slot 1 */
+  --prato-peixe-fg:#7ec8f0; --prato-peixe-bg:#0f1e2d; --prato-peixe-bd:#1a3d5c;  /* slot 2 */
+  --prato-dieta-fg:#6ee7b7; --prato-dieta-bg:#0d2218; --prato-dieta-bd:#1a5c3a;  /* slot 3 */
+  --prato-veg-fg:#fcd34d;   --prato-veg-bg:#1e1b08;   --prato-veg-bd:#4a420a;    /* slot 4 */
+}
+```
+Slot 1 coral · slot 2 azul · slot 3 verde · slot 4 amarelo.
+
+**Helper partilhado** — criar `src/constants/pratos.js`:
+```js
+const SLOTS = ['carne', 'peixe', 'dieta', 'veg']
+export const pratoSlotKey = n => SLOTS[(n - 1) % SLOTS.length]   // n = 1..4
+export const pratoColors = n => {
+  const k = pratoSlotKey(n)
+  return { fg: `var(--prato-${k}-fg)`, bg: `var(--prato-${k}-bg)`, bd: `var(--prato-${k}-bd)` }
+}
+```
+**`PratoTag`** passa a receber `slot` (número 1–4) para a cor e `label` só para o texto: `<PratoTag slot={n} label={em[\`prato${n}_label\`]} />`. Se existir um `ps(label)` ou mapeamento por texto no codebase, substituir por `pratoColors(n)` em todo o lado.
+
+**Contadores e históricos agrupam por `prato_num`**, nunca pela label.
+
+---
+
 ## Ficheiro a alterar
 
 **`src/screens/validacoes/TerminalValidacoes.jsx`** — o componente completo. Toda a **lógica** mantém-se (`process`, `confirmarConsumo`, `useSerial`, HID fallback, `getMeal`, etc.). Só muda a **apresentação**.
@@ -114,7 +148,7 @@ Quando alguém sem marcação toca o cartão, aparece um **takeover vermelho** c
         {fmtHM(r.validado_em)} · {r.pratoDesc}
       </div>
     </div>
-    <PratoTag label={r.pratoLabel} />
+    <PratoTag slot={r.prato_num} label={r.pratoLabel} />
   </div>
 ))}
 ```
@@ -122,8 +156,7 @@ Quando alguém sem marcação toca o cartão, aparece um **takeover vermelho** c
 
 **Strip inferior** (`borderTop: 1px solid C.border`, `background: '#16191f'`, `padding: '14px 28px'`):
 - Eyebrow "FALTAM SERVIR" à esquerda
-- 4 pílulas (Carne / Peixe / Dieta / Vegetariano) em `flex:1` cada, com `PratoTag` + número grande (`font-size:28, font-weight:900`) + `/ total`
-- Cores de fundo/borda/texto por categoria (tokens CSS `--prato-*` já existentes)
+- Um bloco por prato da ementa atual (slots 1–4 com label preenchida), `flex:1` cada. Texto = `prato{n}_label` da ementa. Fundo `pratoColors(n).bg` + barra sólida 8px no topo `pratoColors(n).fg`; número grande 96px/900 branco + `/total`; "X já servidos" por baixo.
 
 **Dados para a strip:** nova query que calcula `marcações - consumos` por categoria para `TODAY` + `meal`:
 ```js
@@ -176,7 +209,7 @@ bg: '#0d2e22'   brilho: radial-gradient(circle at 70% 30%, rgba(52,211,153,0.32)
   - Eyebrow "CONSUMO REGISTADO" (13px, 700, letterSpacing 0.16em)
   - **"Bom apetite."** (96px, Outfit 400, `line-height:0.9`, `color:#fff`)
 - Card do prato (background `'#0a3a2a'`, border `rgba(52,211,153,0.3)`, borderRadius 22, padding `24px 28px`):
-  - `PratoTag` xl + eyebrow "· O TEU PRATO"
+  - Barra lateral 6px `pratoColors(prato_num).fg` + `PratoTag` xl (slot) + eyebrow "· O TEU PRATO"
   - Prato em 42px Outfit
   - Descrição em 19px, `rgba(232,249,236,0.72)`
 
@@ -234,7 +267,7 @@ bg: '#2a1315'   brilho: radial-gradient(circle at 70% 30%, rgba(248,113,113,0.26
             borderRadius: 14, padding: '12px 14px',
             display: 'flex', flexDirection: 'column', gap: 8
           }}>
-          <PratoTag label={label} />
+          <PratoTag slot={n} label={label} />
           <div style={{ fontSize: 14, lineHeight: 1.3, color: '#fff',
             fontWeight: 500, textWrap: 'pretty' }}>{desc}</div>
         </button>
